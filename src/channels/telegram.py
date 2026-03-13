@@ -13,8 +13,7 @@ from telegram.ext import (
     filters,
 )
 
-from src.agent.core import ask_agent
-from src.agent.session_store import clear_session
+from src.agent.core import ask_agent, reset_agent
 from src.config import settings
 
 log = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ async def _reset(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_allowed(update):
         return
     chat_id = str(update.effective_chat.id)
-    clear_session(chat_id)
+    await reset_agent(chat_id)
     await update.message.reply_text("Session cleared. Starting fresh!")
 
 
