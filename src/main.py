@@ -67,6 +67,10 @@ async def _run() -> None:
     try:
         await asyncio.gather(*tasks)
     finally:
+        # Gracefully tear down all agent sessions
+        from src.agent.core import shutdown_all
+
+        await shutdown_all()
         scheduler.shutdown(wait=False)
         if tg_app:
             with contextlib.suppress(Exception):
