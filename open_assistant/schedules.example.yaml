@@ -1,0 +1,32 @@
+# Example scheduled tasks for Open Assistant.
+# Copy to ~/.open-assistant/schedules.yaml and customize.
+
+tasks:
+  - name: morning-briefing
+    cron: "0 8 * * 1-5"          # Weekdays at 8 AM
+    prompt: >
+      Give me a morning briefing:
+      1. Unread emails (just subject + sender for the top 10)
+      2. Today's calendar events
+      3. Any pending Google Tasks
+    notify:
+      telegram: ["123456789"]
+      whatsapp: ["15551234567"]
+
+  - name: weekly-report
+    cron: "0 17 * * 5"           # Fridays at 5 PM
+    prompt: >
+      Summarize my week:
+      - Calendar events from Mon-Fri
+      - Emails I sent this week
+      - Tasks completed vs still pending
+    notify:
+      telegram: ["123456789"]
+
+  - name: drive-cleanup-reminder
+    cron: "0 10 1 * *"           # 1st of each month at 10 AM
+    prompt: >
+      List files in my Google Drive that haven't been modified in over 90 days.
+      Suggest which ones I might want to archive or delete.
+    notify:
+      whatsapp: ["15551234567"]
