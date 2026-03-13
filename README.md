@@ -29,33 +29,42 @@ Google Workspace assistant accessible via **Telegram** and **WhatsApp**, powered
 
 ## Quick start
 
-### Prerequisites
+### 1. Install uv
 
-- Python 3.10+
-- [uv](https://docs.astral.sh/uv/) (fast Python package manager)
-- [Google Workspace CLI](https://github.com/googleworkspace/cli): `npm install -g @googleworkspace/cli`
-- Anthropic API key
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-### Install
+### 2. Install Google Workspace CLI
+
+```bash
+npm install -g @googleworkspace/cli
+```
+
+### 3. Install project dependencies
 
 ```bash
 uv sync
 ```
 
-### Configure
+### 4. Configure environment
 
 ```bash
 cp .env.example .env
-# Fill in your tokens and keys
 ```
 
-Authenticate with Google Workspace:
+Edit `.env` and fill in:
+- `ANTHROPIC_API_KEY` — your Anthropic API key (required)
+- `OA_TELEGRAM_BOT_TOKEN` — from [@BotFather](https://t.me/BotFather) (if using Telegram)
+- `OA_WHATSAPP_*` — Meta Cloud API credentials (if using WhatsApp)
+
+### 5. Authenticate with Google Workspace
 
 ```bash
 gws auth login
 ```
 
-### Run
+### 6. Run
 
 ```bash
 uv run python -m src.main
