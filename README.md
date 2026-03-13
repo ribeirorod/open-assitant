@@ -32,13 +32,14 @@ Google Workspace assistant accessible via **Telegram** and **WhatsApp**, powered
 ### Prerequisites
 
 - Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (fast Python package manager)
 - [Google Workspace CLI](https://github.com/googleworkspace/cli): `npm install -g @googleworkspace/cli`
 - Anthropic API key
 
 ### Install
 
 ```bash
-pip install -e .
+uv sync
 ```
 
 ### Configure
@@ -57,7 +58,7 @@ gws auth login
 ### Run
 
 ```bash
-python -m src.main
+uv run python -m src.main
 ```
 
 Or with Docker:

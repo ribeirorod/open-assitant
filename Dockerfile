@@ -8,12 +8,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Google Workspace CLI
 RUN npm install -g @googleworkspace/cli
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 COPY . .
 
 EXPOSE 8080
 
-CMD ["python", "-m", "src.main"]
+CMD ["uv", "run", "python", "-m", "src.main"]
