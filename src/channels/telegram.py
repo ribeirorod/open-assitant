@@ -14,6 +14,7 @@ from telegram.ext import (
 )
 
 from src.agent.core import ask_agent
+from src.agent.session_store import clear_session
 from src.config import settings
 
 log = logging.getLogger(__name__)
@@ -36,6 +37,14 @@ async def _start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "Just send me a message — I can read your mail, manage your calendar, "
         "list Drive files, and more."
     )
+
+
+async def _reset(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_allowed(update):
+        return
+    chat_id = str(update.effective_chat.id)
+    clear_session(chat_id)
+    await update.message.reply_text("Session cleared. Starting fresh!")
 
 
 async def _handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -64,5 +73,6 @@ def build_telegram_app() -> Application:
 
     app = Application.builder().token(settings.telegram_bot_token).build()
     app.add_handler(CommandHandler("start", _start))
+    app.add_handler(CommandHandler("reset", _reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_message))
     return app
