@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+from datetime import datetime, timezone
 
 import anthropic
 from telegramify_markdown import markdownify
@@ -18,13 +19,31 @@ from telegram.ext import (
 )
 
 from src.agent.core import ask_agent, reset_agent
+from src.agent.session_store import load_session, save_session
 from src.config import settings
 
 log = logging.getLogger(__name__)
 
 MAX_TG_MESSAGE_LENGTH = 4090  # slight buffer under the 4096 hard limit
+MISSED_MESSAGE_THRESHOLD = 300  # seconds — messages older than this at receive time are "missed"
 
 _anthropic = anthropic.AsyncAnthropic()
+
+
+def _is_missed_message(update: Update) -> bool:
+    """Return True if the message arrived while the bot was likely offline."""
+    msg = update.message
+    if msg is None or msg.date is None:
+        return False
+    age = datetime.now(timezone.utc) - msg.date
+    return age.total_seconds() > MISSED_MESSAGE_THRESHOLD
+
+
+def _record_reply(chat_id: str, message_id: int) -> None:
+    """Persist the ID of the last message the bot replied to."""
+    data = load_session(chat_id) or {}
+    data["last_replied_message_id"] = message_id
+    save_session(chat_id, data)
 
 
 def _is_allowed(update: Update) -> bool:
@@ -89,6 +108,8 @@ async def _dispatch(update: Update, prompt: str) -> None:
         except asyncio.CancelledError:
             pass
     await _send_markdown(update, response)
+    if update.message:
+        _record_reply(chat_id, update.message.message_id)
 
 
 async def _chatid(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -255,6 +276,14 @@ async def _handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
     if not text.strip():
         return
 
+    if _is_missed_message(update):
+        snippet = text[:60] + ("…" if len(text) > 60 else "")
+        await update.message.reply_text(
+            f'I may have missed this while I was offline: "{snippet}"\nDo you still need my help with this?'
+        )
+        _record_reply(chat_id, update.message.message_id)
+        return
+
     stop = asyncio.Event()
     typing_task = asyncio.create_task(_keep_typing(update, stop))
     try:
@@ -264,6 +293,7 @@ async def _handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
         typing_task.cancel()
 
     await _send_markdown(update, response)
+    _record_reply(chat_id, update.message.message_id)
 
 
 async def _handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -272,6 +302,13 @@ async def _handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     chat_id = str(update.effective_chat.id)
+
+    if _is_missed_message(update):
+        await update.message.reply_text(
+            'I may have missed a voice message while I was offline.\nDo you still need my help with this?'
+        )
+        _record_reply(chat_id, update.message.message_id)
+        return
 
     stop = asyncio.Event()
     typing_task = asyncio.create_task(_keep_typing(update, stop))
@@ -299,6 +336,7 @@ async def _handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         typing_task.cancel()
 
     await _send_markdown(update, response)
+    _record_reply(chat_id, update.message.message_id)
 
 
 async def _handle_error(update: object, ctx: ContextTypes.DEFAULT_TYPE) -> None:
