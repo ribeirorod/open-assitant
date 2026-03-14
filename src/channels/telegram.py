@@ -7,6 +7,8 @@ import logging
 from datetime import datetime, timezone
 
 import groq
+import httpx
+import openai
 from telegramify_markdown import markdownify
 from telegram import Update
 from telegram.ext import (
@@ -27,6 +29,7 @@ MAX_TG_MESSAGE_LENGTH = 4090  # slight buffer under the 4096 hard limit
 MISSED_MESSAGE_THRESHOLD = 300  # seconds — messages older than this at receive time are "missed"
 
 _groq = groq.AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
+_openai = openai.AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 
 
 def _is_missed_message(update: Update) -> bool:
@@ -232,16 +235,71 @@ async def _download_file(ctx: ContextTypes.DEFAULT_TYPE, file_id: str) -> bytes:
     return bytes(await tg_file.download_as_bytearray())
 
 
-async def _transcribe(audio_bytes: bytes, filename: str) -> str | None:
-    """Transcribe audio bytes via Groq Whisper. Returns transcript or None."""
+async def _transcribe_groq(audio_bytes: bytes, filename: str) -> str | None:
     if _groq is None:
-        raise RuntimeError("OA_GROQ_API_KEY is not set — voice transcription unavailable")
+        return None
     result = await _groq.audio.transcriptions.create(
         model="whisper-large-v3-turbo",
         file=(filename, audio_bytes),
         response_format="text",
     )
     return result.strip() if result else None
+
+
+async def _transcribe_openai(audio_bytes: bytes, filename: str) -> str | None:
+    if _openai is None:
+        return None
+    result = await _openai.audio.transcriptions.create(
+        model="whisper-1",
+        file=(filename, audio_bytes),
+        response_format="text",
+    )
+    return result.strip() if result else None
+
+
+async def _transcribe_deepgram(audio_bytes: bytes, filename: str) -> str | None:
+    if not settings.deepgram_api_key:
+        return None
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true",
+            headers={"Authorization": f"Token {settings.deepgram_api_key}"},
+            content=audio_bytes,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        transcript = resp.json()["results"]["channels"][0]["alternatives"][0]["transcript"]
+        return transcript.strip() if transcript else None
+
+
+async def _transcribe(audio_bytes: bytes, filename: str) -> str | None:
+    """Try STT providers in order: Groq → OpenAI → Deepgram."""
+    for provider in (_transcribe_groq, _transcribe_openai, _transcribe_deepgram):
+        try:
+            result = await provider(audio_bytes, filename)
+            if result:
+                log.info("STT succeeded via %s", provider.__name__)
+                return result
+        except Exception as exc:
+            log.warning("STT provider %s failed: %s", provider.__name__, exc)
+    return None
+
+
+async def _synthesize(text: str) -> bytes | None:
+    """Convert text to speech via OpenAI TTS. Returns OGG bytes or None."""
+    if _openai is None:
+        return None
+    try:
+        response = await _openai.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=text,
+            response_format="opus",  # OGG/Opus — native Telegram voice format
+        )
+        return response.content
+    except Exception as exc:
+        log.warning("TTS failed: %s", exc)
+        return None
 
 
 async def _transcribe_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> str | None:
@@ -317,15 +375,18 @@ async def _handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("No speech detected in that audio.")
         return
 
-    await update.message.reply_text(f'Heard: "{transcript}"')
-
     try:
         response = await ask_agent(transcript, chat_id)
     finally:
         stop.set()
         typing_task.cancel()
 
-    await _send_markdown(update, response)
+    # Try to reply with voice; fall back to text if TTS unavailable or fails
+    audio = await _synthesize(response)
+    if audio:
+        await update.message.reply_voice(audio)
+    else:
+        await _send_markdown(update, response)
     _record_reply(chat_id, update.message.message_id)
 
 
