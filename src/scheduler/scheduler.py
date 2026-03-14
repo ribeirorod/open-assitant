@@ -27,7 +27,6 @@ from __future__ import annotations
 import logging
 import pathlib
 
-import anyio
 import yaml
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -84,8 +83,9 @@ def start_scheduler() -> AsyncIOScheduler:
         cron_expr = task["cron"]
         trigger = CronTrigger.from_crontab(cron_expr)
         scheduler.add_job(
-            lambda t=task: anyio.from_thread.run(_run_task, t),
+            _run_task,
             trigger=trigger,
+            args=[task],
             id=task["name"],
             replace_existing=True,
         )
