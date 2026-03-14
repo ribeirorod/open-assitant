@@ -84,6 +84,10 @@ async def _dispatch(update: Update, prompt: str) -> None:
     finally:
         stop.set()
         typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
     await _send_markdown(update, response)
 
 
@@ -91,7 +95,7 @@ async def _chatid(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """Return the user's Telegram chat ID — needed to configure schedules.yaml."""
     if not _is_allowed(update):
         return
-    await update.message.reply_text(f"Your chat ID: `{update.effective_chat.id}`", parse_mode="MarkdownV2")
+    await update.message.reply_text(f"Your chat ID: {update.effective_chat.id}")
 
 
 # ── Life-assistant commands ──────────────────────────────────────────────────
@@ -107,7 +111,7 @@ _PLAN_PROMPT = """\
    **Emails needing action** (max 3, one line each with suggested next step)
    **One item to face today** (oldest item in procrastination.md by added date, if any >3 days old)
 6. Ask: "Does this look right?"
-Max 15 lines. Do NOT write to memory during this scheduled prompt."""
+Max 15 lines."""
 
 
 _WEEK_PROMPT = """\
@@ -178,7 +182,10 @@ async def _avoid(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def _update(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     args = " ".join(ctx.args) if ctx.args else ""
-    await _dispatch(update, _UPDATE_PROMPT_TEMPLATE.format(args=f"'{args}' " if args else ""))
+    if not args:
+        await update.message.reply_text("Usage: /update [topic]  e.g. /update projects")
+        return
+    await _dispatch(update, _UPDATE_PROMPT_TEMPLATE.format(args=f"'{args}' "))
 
 
 async def _start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
