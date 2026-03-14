@@ -12,8 +12,10 @@ class Settings(BaseSettings):
     # --- Claude Agent SDK ---
     claude_model: str = "claude-sonnet-4-6"
 
-    # --- Groq (voice transcription) — read without OA_ prefix ---
+    # --- Voice (STT + TTS) — read without OA_ prefix ---
     groq_api_key: str = Field(default="", validation_alias="GROQ_API_KEY")
+    openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    deepgram_api_key: str = Field(default="", validation_alias="DEEPGRAM_API_KEY")
 
     # --- Telegram ---
     telegram_bot_token: str = ""
