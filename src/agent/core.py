@@ -19,6 +19,7 @@ from claude_agent_sdk import (
     SystemMessage,
     TextBlock,
 )
+from claude_agent_sdk.types import McpStdioServerConfig
 
 from src.agent.session_store import clear_session, load_session, save_session
 from src.config import settings
@@ -88,10 +89,20 @@ BREVITY:
 _clients: dict[str, ClaudeSDKClient] = {}
 
 
+_MCP_SERVERS: dict[str, McpStdioServerConfig] = {
+    "perplexity-ask": McpStdioServerConfig(
+        command="npx",
+        args=["-y", "server-perplexity-ask"],
+        env={"PERPLEXITY_API_KEY": settings.perplexity_api_key},
+    ),
+}
+
+
 def _build_options(resume_session_id: str | None = None) -> ClaudeAgentOptions:
     opts = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
-        allowed_tools=["Bash", "Read", "Write", "WebSearch", "WebFetch"],
+        allowed_tools=["Bash", "Read", "Write", "WebSearch", "WebFetch", "mcp__perplexity-ask__perplexity_ask"],
+        mcp_servers=_MCP_SERVERS,
         model=settings.claude_model,
         max_turns=10,
     )
