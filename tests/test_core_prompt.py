@@ -4,8 +4,8 @@
 def test_system_prompt_has_memory_instructions():
     from src.agent.core import SYSTEM_PROMPT
     assert "~/.open-assistant/memory/" in SYSTEM_PROMPT
-    assert "index.md" in SYSTEM_PROMPT
-    assert "Read tool" in SYSTEM_PROMPT
+    assert "start of every response" in SYSTEM_PROMPT
+    assert "read index.md" in SYSTEM_PROMPT.lower()
     assert "Write tool" in SYSTEM_PROMPT
 
 
@@ -20,6 +20,7 @@ def test_system_prompt_has_procrastination_protocol():
 
 
 def test_system_prompt_scheduled_jobs_must_not_write():
-    """Scheduled job prompts must include the DO NOT write instruction."""
+    """Both the meta-instruction and the obeyed string must be present."""
     from src.agent.core import SYSTEM_PROMPT
-    assert "DO NOT write to memory" in SYSTEM_PROMPT or "Scheduled job prompts will say" in SYSTEM_PROMPT
+    assert "Scheduled job prompts will say" in SYSTEM_PROMPT
+    assert "DO NOT write to memory" in SYSTEM_PROMPT
