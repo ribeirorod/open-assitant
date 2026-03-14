@@ -91,7 +91,7 @@ _clients: dict[str, ClaudeSDKClient] = {}
 def _build_options(resume_session_id: str | None = None) -> ClaudeAgentOptions:
     opts = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
-        allowed_tools=["Bash", "Read", "Write"],
+        allowed_tools=["Bash", "Read", "Write", "WebSearch", "WebFetch"],
         model=settings.claude_model,
         max_turns=10,
     )
