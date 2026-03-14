@@ -1,5 +1,5 @@
 import pathlib
-import pytest
+import re
 
 
 MEMORY_DIR = pathlib.Path.home() / ".open-assistant" / "memory"
@@ -35,7 +35,6 @@ def test_index_format():
 def test_procrastination_entry_format():
     """Entries must start with '- [YYYY-MM-DD added]' so age can be calculated."""
     content = (MEMORY_DIR / "procrastination.md").read_text()
-    import re
     entries = [l for l in content.splitlines() if l.startswith("- [")]
     for entry in entries:
         assert re.match(r"^- \[\d{4}-\d{2}-\d{2} added\]", entry), (
