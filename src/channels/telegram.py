@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 from datetime import datetime, timezone
 
-import anthropic
+import groq
 from telegramify_markdown import markdownify
 from telegram import Update
 from telegram.ext import (
@@ -27,7 +26,7 @@ log = logging.getLogger(__name__)
 MAX_TG_MESSAGE_LENGTH = 4090  # slight buffer under the 4096 hard limit
 MISSED_MESSAGE_THRESHOLD = 300  # seconds — messages older than this at receive time are "missed"
 
-_anthropic = anthropic.AsyncAnthropic()
+_groq = groq.AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
 
 
 def _is_missed_message(update: Update) -> bool:
@@ -227,43 +226,34 @@ async def _reset(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Session cleared.")
 
 
+async def _download_file(ctx: ContextTypes.DEFAULT_TYPE, file_id: str) -> bytes:
+    """Download a Telegram file by file_id and return its raw bytes."""
+    tg_file = await ctx.bot.get_file(file_id)
+    return bytes(await tg_file.download_as_bytearray())
+
+
+async def _transcribe(audio_bytes: bytes, filename: str) -> str | None:
+    """Transcribe audio bytes via Groq Whisper. Returns transcript or None."""
+    if _groq is None:
+        raise RuntimeError("OA_GROQ_API_KEY is not set — voice transcription unavailable")
+    result = await _groq.audio.transcriptions.create(
+        model="whisper-large-v3-turbo",
+        file=(filename, audio_bytes),
+        response_format="text",
+    )
+    return result.strip() if result else None
+
+
 async def _transcribe_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> str | None:
-    """Download a Telegram voice/audio message and transcribe it via Claude."""
+    """Download a Telegram voice/audio message and transcribe it via Groq Whisper."""
     msg = update.message
     voice = msg.voice or msg.audio
     if not voice:
         return None
 
-    tg_file = await ctx.bot.get_file(voice.file_id)
-    audio_bytes = await tg_file.download_as_bytearray()
-    audio_b64 = base64.standard_b64encode(bytes(audio_bytes)).decode()
-
-    media_type = "audio/ogg" if msg.voice else "audio/mpeg"
-
-    result = await _anthropic.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": audio_b64,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": "Transcribe this audio message exactly as spoken. Return only the transcript, no commentary.",
-                    },
-                ],
-            }
-        ],
-    )
-    return result.content[0].text.strip() if result.content else None
+    filename = "voice.ogg" if msg.voice else "audio.mp3"
+    audio_bytes = await _download_file(ctx, voice.file_id)
+    return await _transcribe(audio_bytes, filename)
 
 
 async def _handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:

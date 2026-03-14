@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -10,6 +11,9 @@ class Settings(BaseSettings):
 
     # --- Claude Agent SDK ---
     claude_model: str = "claude-sonnet-4-6"
+
+    # --- Groq (voice transcription) — read without OA_ prefix ---
+    groq_api_key: str = Field(default="", validation_alias="GROQ_API_KEY")
 
     # --- Telegram ---
     telegram_bot_token: str = ""
