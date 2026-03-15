@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import pathlib
 from datetime import datetime, timezone
+
+_SKILLS_DIR = pathlib.Path(__file__).parent.parent / "skills"
+
+
+def _skill(name: str, **kwargs: str) -> str:
+    """Load a skill prompt file and optionally format it with kwargs."""
+    text = (_SKILLS_DIR / f"{name}.md").read_text()
+    return text.format(**kwargs) if kwargs else text
 
 import groq
 import httpx
@@ -123,64 +132,12 @@ async def _chatid(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 # ── Life-assistant commands ──────────────────────────────────────────────────
 
-_PLAN_PROMPT = """\
-/plan — run the daily planning workflow:
-1. Read ~/.open-assistant/memory/index.md then projects.md, commitments.md, preferences.md, procrastination.md.
-2. Run: gws calendar +agenda
-3. Run: gws gmail +triage
-4. Run: gws tasks tasks list --params '{"tasklist":"@default"}'
-5. Produce a structured daily plan:
-   **Today's 3 priorities** (realistic given the calendar — no more than 3, bold them)
-   **Emails needing action** (max 3, one line each with suggested next step)
-   **One item to face today** (oldest item in procrastination.md by added date, if any >3 days old)
-6. Ask: "Does this look right?"
-Max 15 lines."""
-
-
-_WEEK_PROMPT = """\
-/week — run the weekly overview workflow:
-1. Read all files in ~/.open-assistant/memory/.
-2. Use Bash to compute next Monday and Sunday in Europe/Berlin time:
-   python3 -c "from datetime import datetime, timedelta; import zoneinfo; tz=zoneinfo.ZoneInfo('Europe/Berlin'); now=datetime.now(tz); offset=now.strftime('%z'); offset=offset[:3]+':'+offset[3:]; today=now.date(); monday=today+timedelta(days=(7-today.weekday())%7 or 7); sunday=monday+timedelta(days=6); print(monday.isoformat()+'T00:00:00'+offset, sunday.isoformat()+'T23:59:59'+offset)"
-3. Run: gws calendar events list --params '{"calendarId":"primary","timeMin":"<MONDAY>","timeMax":"<SUNDAY>","singleEvents":true,"orderBy":"startTime"}'
-4. Run: gws tasks tasks list --params '{"tasklist":"@default"}'
-5. Output:
-   - Days that look overloaded (>3 commitments)
-   - Missing time blocks for: gym (need 3 sessions), family/relationship, piano
-   - Suggested time blocks (list only — do NOT create calendar events)
-   - One thing to defer if the week is too full
-6. Ask: "Want me to create these blocks?" — only create after explicit confirmation."""
-
-
-_AVOID_PROMPT = """\
-/avoid — surface procrastinated items:
-1. Read ~/.open-assistant/memory/procrastination.md.
-2. Run: gws tasks tasks list --params '{"tasklist":"@default"}' to find tasks with old due dates.
-3. List avoided items by name with days elapsed (calculate from [YYYY-MM-DD added] in procrastination.md).
-4. Ask: "Which one can you do 30 minutes on today?"
-5. When user picks one:
-   a. Compute current time in Berlin: python3 -c "from datetime import datetime; import zoneinfo; tz=zoneinfo.ZoneInfo('Europe/Berlin'); now=datetime.now(tz); print(now.strftime('%H:%M'), now.isoformat())"
-   b. Run: gws calendar events list --params '{"calendarId":"primary","timeMin":"<NOW_ISO>","timeMax":"<END_OF_DAY_ISO>","singleEvents":true,"orderBy":"startTime"}' to find free slots.
-   c. Identify first gap of ≥30 minutes. If none found or parsing unclear, ask: "What time works for you?"
-   d. Propose: "I can block HH:MM–HH:MM for [item]. Confirm?"
-   e. Only create the calendar event after explicit confirmation. Event title: "Focus: [item name]" """
-
-
-_UPDATE_PROMPT_TEMPLATE = """\
-/update {args}— update memory:
-1. Read ~/.open-assistant/memory/index.md.
-2. Read the memory file most relevant to the topic "{args}".
-3. Ask what's changed (if the user hasn't already explained in this message).
-4. Write the updated content back to the file using the Write tool.
-5. Confirm: "Updated [filename] — here's what changed: ..."."""
-
-
 async def _plan(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    await _dispatch(update, _PLAN_PROMPT)
+    await _dispatch(update, _skill("plan"))
 
 
 async def _week(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    await _dispatch(update, _WEEK_PROMPT)
+    await _dispatch(update, _skill("week"))
 
 
 async def _note(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -188,19 +145,11 @@ async def _note(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not args:
         await update.message.reply_text("Usage: /note [your note text]")
         return
-    prompt = (
-        f"/note — capture this: {args}\n\n"
-        "Determine whether this belongs in Google Tasks, a memory file, or both.\n"
-        "- If it is a task or reminder: add it to Google Tasks under the right project label.\n"
-        "- If it is a goal, preference, or personal fact: write it to the appropriate memory file.\n"
-        "- If both apply: do both.\n"
-        "Confirm exactly what you stored and where."
-    )
-    await _dispatch(update, prompt)
+    await _dispatch(update, _skill("note", args=args))
 
 
 async def _avoid(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    await _dispatch(update, _AVOID_PROMPT)
+    await _dispatch(update, _skill("avoid"))
 
 
 async def _update(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -208,7 +157,21 @@ async def _update(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not args:
         await update.message.reply_text("Usage: /update [topic]  e.g. /update projects")
         return
-    await _dispatch(update, _UPDATE_PROMPT_TEMPLATE.format(args=f"'{args}' "))
+    await _dispatch(update, _skill("update", args=args))
+
+
+async def _calibration(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await _dispatch(update, _skill("calibration"))
+
+
+async def _memory(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    args = " ".join(ctx.args) if ctx.args else ""
+    await _dispatch(update, _skill("memory") + (f"\n\nSubcommand: {args}" if args else ""))
+
+
+async def _project(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    args = " ".join(ctx.args) if ctx.args else ""
+    await _dispatch(update, _skill("project") + (f"\n\nProject name: {args}" if args else ""))
 
 
 async def _start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -410,6 +373,9 @@ def build_telegram_app() -> Application:
     app.add_handler(CommandHandler("note", _note))
     app.add_handler(CommandHandler("avoid", _avoid))
     app.add_handler(CommandHandler("update", _update))
+    app.add_handler(CommandHandler("calibration", _calibration))
+    app.add_handler(CommandHandler("memory", _memory))
+    app.add_handler(CommandHandler("project", _project))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, _handle_voice))
     app.add_error_handler(_handle_error)
