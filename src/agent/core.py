@@ -101,10 +101,11 @@ _MCP_SERVERS: dict[str, McpStdioServerConfig] = {
 def _build_options(resume_session_id: str | None = None) -> ClaudeAgentOptions:
     opts = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
-        allowed_tools=["Bash", "Read", "Write", "WebSearch", "WebFetch", "mcp__perplexity-ask__perplexity_ask"],
+        allowed_tools=["Bash", "Read", "Write", "WebSearch", "WebFetch", "Skill", "mcp__perplexity-ask__perplexity_ask"],
         mcp_servers=_MCP_SERVERS,
+        setting_sources=["project"],
         model=settings.claude_model,
-        max_turns=10,
+        max_turns=15,
     )
     if resume_session_id:
         opts.resume = resume_session_id
