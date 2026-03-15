@@ -24,10 +24,8 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_allowed_users: list[str] = []  # usernames; empty = allow all
 
-    # --- WhatsApp (Meta Cloud API) ---
-    whatsapp_verify_token: str = ""
-    whatsapp_access_token: str = ""
-    whatsapp_phone_number_id: str = ""
+    # --- WhatsApp (Baileys bridge) ---
+    baileys_bridge_url: str = "http://localhost:3100"
 
     # --- Webhook server (for WhatsApp inbound) ---
     webhook_host: str = "0.0.0.0"
