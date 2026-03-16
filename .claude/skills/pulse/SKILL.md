@@ -82,6 +82,8 @@ Fetch metadata for each result the same way as Step 3.
 
 ## Step 5: Judge significance
 
+If neither query returned any emails, proceed directly to Step 6 (write the log) then Step 7 (return empty — no notification).
+
 For each email (inbox + spam), decide: NOTIFY or skip.
 
 RAISE significance (lean toward NOTIFY) if:
@@ -106,7 +108,7 @@ Compute the current timestamp in Europe/Berlin timezone:
 python3 -c "from datetime import datetime; import zoneinfo; tz=zoneinfo.ZoneInfo('Europe/Berlin'); print(datetime.now(tz).isoformat(timespec='seconds'))"
 ```
 
-Read the current pulse-log.md again (to get the full existing log content).
+Use the log content already read in Step 1 as the base. Do NOT re-read the file — use the snapshot from Step 1 to avoid overwriting entries added between reads.
 
 Rewrite ~/.open-assistant/memory/pulse-log.md entirely with the Write tool — a single write:
 
@@ -150,4 +152,4 @@ Return a plain-text numbered list — no intro, no sign-off, numbers only:
 2. [SPAM] <Sender> — <one-line description>
 ```
 
-If nothing was notable: return an empty string. Do not output anything else.
+If nothing was notable: produce no output at all. Do not write to chat, do not send a blank message, do not call any notification tool. Complete silently.
