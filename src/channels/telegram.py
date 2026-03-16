@@ -7,13 +7,21 @@ import logging
 import pathlib
 from datetime import datetime, timezone
 
-_SKILLS_DIR = pathlib.Path(__file__).parent.parent / "skills"
+# telegram.py is at src/channels/telegram.py
+# .parent → src/channels  .parent → src  .parent → project root
+_SKILLS_DIR = pathlib.Path(__file__).parent.parent.parent / ".claude" / "skills"
 
 
 def _skill(name: str, **kwargs: str) -> str:
-    """Load a skill prompt file and optionally format it with kwargs."""
-    text = (_SKILLS_DIR / f"{name}.md").read_text()
-    return text.format(**kwargs) if kwargs else text
+    """Load a skill from .claude/skills/<name>/SKILL.md.
+
+    User args are appended as a suffix — never injected via str.format(),
+    because SKILL.md files contain JSON with curly braces that would crash it.
+    """
+    text = (_SKILLS_DIR / name / "SKILL.md").read_text()
+    if kwargs.get("args"):
+        text = text + f"\n\nUser input: {kwargs['args']}"
+    return text
 
 import groq
 import httpx
@@ -172,6 +180,14 @@ async def _memory(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 async def _project(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     args = " ".join(ctx.args) if ctx.args else ""
     await _dispatch(update, _skill("project") + (f"\n\nProject name: {args}" if args else ""))
+
+
+async def _find(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    args = " ".join(ctx.args) if ctx.args else ""
+    if not args:
+        await update.message.reply_text("Usage: /find <filename or keyword>")
+        return
+    await _dispatch(update, _skill("find", query=args))
 
 
 async def _start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -376,6 +392,7 @@ def build_telegram_app() -> Application:
     app.add_handler(CommandHandler("calibration", _calibration))
     app.add_handler(CommandHandler("memory", _memory))
     app.add_handler(CommandHandler("project", _project))
+    app.add_handler(CommandHandler("find", _find))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, _handle_voice))
     app.add_error_handler(_handle_error)
