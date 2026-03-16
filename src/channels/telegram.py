@@ -187,7 +187,7 @@ async def _find(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not args:
         await update.message.reply_text("Usage: /find <filename or keyword>")
         return
-    await _dispatch(update, _skill("find", query=args))
+    await _dispatch(update, _skill("find", args=args))
 
 
 async def _start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
