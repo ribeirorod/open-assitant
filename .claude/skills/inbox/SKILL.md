@@ -61,9 +61,9 @@ For numbers or "all" (confirmable actions only):
   ```bash
   gws gmail users messages batchModify --params '{"userId":"me"}' --json '{"ids":["<id1>","<id2>",...],"removeLabelIds":["INBOX"]}'
   ```
-- Block sender: add entry to Blocked Senders section of email-prefs.md with today's date
-- Block domain: add entry to Blocked Domains section of email-prefs.md with today's date
-- Trust sender/domain: add entry to Trusted Senders section of email-prefs.md with today's date and reason
+- Block sender: use the Edit tool to append a new line to the Blocked Senders section of email-prefs.md with today's date (never use Write — append only)
+- Block domain: use the Edit tool to append a new line to the Blocked Domains section of email-prefs.md with today's date (never use Write — append only)
+- Trust sender/domain: use the Edit tool to append a new line to the Trusted Senders section of email-prefs.md with today's date and reason (never use Write — append only)
 
 For "delete N" only (exact phrase with item number):
   ```bash

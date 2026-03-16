@@ -3,8 +3,8 @@
 You are running the hourly background email surveillance pulse.
 
 CONSTRAINTS:
-- DO NOT write to any memory file other than ~/.open-assistant/memory/pulse-log.md.
-- DO NOT write to email-prefs.md (read-only for pulse).
+- DO NOT write to any memory file other than ~/.open-assistant/memory/pulse-log.md (except: create email-prefs.md if it does not exist — see Step 6).
+- DO NOT modify email-prefs.md if it already exists (read-only for pulse; first-run creation is the only exception).
 - Return an empty string if nothing is notable — do NOT send any message.
 - Do NOT greet the user. Do NOT add filler text.
 
