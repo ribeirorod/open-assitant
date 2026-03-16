@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(/YOUR_HOME/.open-assistant/memory/**)",
+      "Write(/YOUR_HOME/.open-assistant/memory/**)",
+      "Read(/YOUR_HOME/projects/**)",
+      "Read(/YOUR_HOME/Downloads/**)",
+      "Read(/YOUR_HOME/Documents/**)",
+      "Bash(find /YOUR_HOME/projects -iname *)",
+      "Bash(find /YOUR_HOME/Downloads -iname *)",
+      "Bash(find /YOUR_HOME/Documents -iname *)",
+      "Bash(grep -ril * /YOUR_HOME/projects)",
+      "Bash(grep -ril * /YOUR_HOME/Downloads)",
+      "Bash(grep -ril * /YOUR_HOME/Documents)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Write(.env)",
+      "Read(**/.env)",
+      "Write(**/.env)",
+      "Read(*.env*)",
+      "Write(*.env*)"
+    ]
+  },
+  "enabledPlugins": {
+    "skill-creator@claude-plugins-official": true
+  }
+}
