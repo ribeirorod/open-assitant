@@ -9,9 +9,19 @@ build/
 .ruff_cache/
 .pytest_cache/
 
-# Claude Code — local settings and credentials
+# Claude Code — local settings (use .claude/settings.example.json as template)
 .claude/settings.json
+
+# Credentials and OAuth tokens — never commit these
 gws-creds.json
+*-creds.json
+*_creds.json
+*credentials*.json
+*token*.json
+token.json
+service-account*.json
+
+# Scratch / download files
 download.html
 
 # Memory files — keep only the example
