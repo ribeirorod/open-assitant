@@ -205,4 +205,4 @@ ask_agent() → ClaudeSDKClient
 
 **Runtime**
 - [ ] App started from project root resolves `.claude/skills/` correctly
-- [ ] `ClaudeAgentOptions` in `_build_options()` has explicit `cwd=str(Path(__file__).parent.parent)` set to project root for deterministic skill discovery
+- [ ] `ClaudeAgentOptions` in `_build_options()` has explicit `cwd=str(Path(__file__).parent.parent.parent)` set to project root for deterministic skill discovery (3 levels up from `src/agent/core.py`)
