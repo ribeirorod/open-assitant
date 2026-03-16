@@ -1,5 +1,18 @@
 {
   "permissions": {
+    "allow": [
+      "Read(/Users/beam/.open-assistant/memory/**)",
+      "Write(/Users/beam/.open-assistant/memory/**)",
+      "Read(/Users/beam/projects/**)",
+      "Read(/Users/beam/Downloads/**)",
+      "Read(/Users/beam/Documents/**)",
+      "Bash(find /Users/beam/projects -iname *)",
+      "Bash(find /Users/beam/Downloads -iname *)",
+      "Bash(find /Users/beam/Documents -iname *)",
+      "Bash(grep -ril * /Users/beam/projects)",
+      "Bash(grep -ril * /Users/beam/Downloads)",
+      "Bash(grep -ril * /Users/beam/Documents)"
+    ],
     "deny": [
       "Read(.env)",
       "Write(.env)",
@@ -8,5 +21,8 @@
       "Read(*.env*)",
       "Write(*.env*)"
     ]
+  },
+  "enabledPlugins": {
+    "skill-creator@claude-plugins-official": true
   }
 }
