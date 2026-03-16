@@ -6,12 +6,12 @@
 
 ## Context
 
-João is a 40-year-old data engineer living in Germany. He is simultaneously:
+Rodolfo is a 40-year-old data engineer living in Germany. He is simultaneously:
 - Expecting his first child (wife 9 months pregnant — baby imminent)
 - Launching an app
 - Searching for a new job
 
-He struggles with hyper-focus (dives into one area and neglects others), procrastination on uncomfortable tasks, and managing the structural demands of life in Germany (bureaucracy, tax deadlines, registrations). He wants to apply a project management mindset across all life areas: relationship, fitness/health, work, professional projects, family & friends, and German bureaucracy.
+He struggles with hyper-focus (dives into one area and neglects others), procrastination on uncomfortable tasks, and managing the structural demands of life in Germany (bureaucracy, tax deadlines, registrations). He wants to apply a project management mindset across all life areas: relationship, fitness/health, work, leisure,professional projects, family & friends, and life in Germany (bureaucracy, tax deadlines, registrations).
 
 The assistant runs on Telegram (voice + text), has access to Gmail, Google Calendar, Google Tasks, Google Drive, and Google Docs via the `gws` CLI, and uses the Claude Agent SDK for multi-turn sessions.
 
