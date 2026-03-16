@@ -34,11 +34,13 @@ The pulse is a silent background intelligence job. It always runs; it only notif
 **On each run:**
 
 1. Read `~/.open-assistant/memory/pulse-log.md` — extract `last_successful_run` timestamp from the top of the file using this fallback chain:
-   - Valid, parseable ISO 8601 timestamp → use as `timeMin`
-   - Absent, malformed, or unparseable → default to 1 hour ago
-   - Timestamp in the future (clock skew, DST edge) → default to 1 hour ago
+   - Valid, parseable ISO 8601 timestamp **with timezone offset** → use as `timeMin`
+   - Timestamp present but lacking timezone offset (naive datetime) → treat as malformed, use 24 hours ago
+   - Absent, malformed, or unparseable → default to 24 hours ago
+   - Timestamp in the future (clock skew, DST edge) → default to 24 hours ago
    - Timestamp older than 24 hours (long outage) → cap to 24 hours ago; note that inbox and spam windows will be aligned but a longer gap is not covered by the spam query (acceptable — inbox query covers it)
-   - File does not exist → default to 1 hour ago; create the file with canonical structure at the end of a successful run
+   - File does not exist → default to 24 hours ago; create the file with canonical structure at the end of a successful run
+   - Using 24h (not 1h) as fallback ensures overnight and weekend email is caught on the first run after any gap (e.g. Monday 8am catching email since Friday 6pm)
 
 2. Read `~/.open-assistant/memory/email-prefs.md` — load blocked senders, blocked domains, trusted senders, and accumulated pattern notes. If the file does not exist, proceed with empty lists and create it with canonical structure at the end of the first successful run.
 
