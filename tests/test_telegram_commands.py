@@ -38,3 +38,8 @@ def test_new_commands_registered(tg_app):
     cmds = _registered_commands(tg_app)
     for cmd in ["plan", "week", "note", "avoid", "update", "chatid"]:
         assert cmd in cmds, f"/{cmd} not registered"
+
+
+def test_inbox_command_registered(tg_app):
+    cmds = _registered_commands(tg_app)
+    assert "inbox" in cmds, "/inbox command not registered in Telegram app"

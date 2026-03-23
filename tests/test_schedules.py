@@ -11,6 +11,8 @@ EXPECTED_JOB_NAMES = {
     "weekly-planning",
     "midweek-pulse",
     "bureaucracy-check",
+    "pulse",
+    "inbox-manager",
 }
 
 
