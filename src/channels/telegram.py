@@ -364,12 +364,7 @@ async def _handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         stop.set()
         typing_task.cancel()
 
-    # Try to reply with voice; fall back to text if TTS unavailable or fails
-    audio = await _synthesize(response)
-    if audio:
-        await update.message.reply_voice(audio)
-    else:
-        await _send_markdown(update, response)
+    await _send_markdown(update, response)
     _record_reply(chat_id, update.message.message_id)
 
 
