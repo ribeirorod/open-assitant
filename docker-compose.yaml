@@ -5,12 +5,29 @@ services:
       - "${OA_WEBHOOK_PORT:-8080}:8080"
     env_file:
       - .env
+    environment:
+      - OA_BAILEYS_BRIDGE_URL=http://baileys:3100
     volumes:
       # Persist sessions and schedule config
       - assistant-data:/root/.open-assistant
       # Mount GWS credentials if using service account
       # - ./gws-credentials.json:/root/.config/gws/credentials.json:ro
+    depends_on:
+      - baileys
+    restart: unless-stopped
+
+  baileys:
+    build: ./baileys-bridge
+    ports:
+      - "${BAILEYS_PORT:-3100}:3100"
+    environment:
+      - BAILEYS_PORT=3100
+      - BAILEYS_CALLBACK_URL=http://assistant:8080/webhook/whatsapp/baileys
+      - BAILEYS_ACK_MESSAGE=${BAILEYS_ACK_MESSAGE:-}
+    volumes:
+      - baileys-auth:/app/auth_state
     restart: unless-stopped
 
 volumes:
   assistant-data:
+  baileys-auth:
