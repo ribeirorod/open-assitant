@@ -190,6 +190,10 @@ async def _find(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _dispatch(update, _skill("find", args=args))
 
 
+async def _inbox(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await _dispatch(update, _skill("inbox"))
+
+
 async def _start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_allowed(update):
         return
@@ -360,12 +364,7 @@ async def _handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         stop.set()
         typing_task.cancel()
 
-    # Try to reply with voice; fall back to text if TTS unavailable or fails
-    audio = await _synthesize(response)
-    if audio:
-        await update.message.reply_voice(audio)
-    else:
-        await _send_markdown(update, response)
+    await _send_markdown(update, response)
     _record_reply(chat_id, update.message.message_id)
 
 
@@ -393,6 +392,7 @@ def build_telegram_app() -> Application:
     app.add_handler(CommandHandler("memory", _memory))
     app.add_handler(CommandHandler("project", _project))
     app.add_handler(CommandHandler("find", _find))
+    app.add_handler(CommandHandler("inbox", _inbox))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, _handle_voice))
     app.add_error_handler(_handle_error)

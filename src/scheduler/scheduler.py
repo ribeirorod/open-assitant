@@ -54,6 +54,11 @@ async def _run_task(task: dict) -> None:
 
     response = await ask_agent(prompt, chat_id=f"sched:{name}")
 
+    # Silent tasks (e.g. pulse with no notable emails) return empty string or sentinel — skip fan-out
+    if not response or not response.strip() or response.strip() == "(no response)":
+        log.info("scheduler: task %s returned empty response — no notifications sent", name)
+        return
+
     # Fan out to channels
     notify = task.get("notify", {})
 

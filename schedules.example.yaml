@@ -1,9 +1,12 @@
 # Example scheduled tasks for Open Assistant.
 # Copy to ~/.open-assistant/schedules.yaml and customize.
+#
+# NOTE: APScheduler's from_crontab() uses 0=Monday (Python weekday convention),
+# not 0=Sunday (standard Unix cron). Use 0-4 for Mon-Fri, not 1-5.
 
 tasks:
   - name: morning-briefing
-    cron: "0 8 * * 1-5"          # Weekdays at 8 AM
+    cron: "0 8 * * 0-4"          # Weekdays (Mon-Fri) at 8 AM
     prompt: >
       Give me a morning briefing:
       1. Unread emails (just subject + sender for the top 10)
@@ -14,7 +17,7 @@ tasks:
       whatsapp: ["15551234567"]
 
   - name: weekly-report
-    cron: "0 17 * * 5"           # Fridays at 5 PM
+    cron: "0 17 * * 4"           # Fridays at 5 PM
     prompt: >
       Summarize my week:
       - Calendar events from Mon-Fri
