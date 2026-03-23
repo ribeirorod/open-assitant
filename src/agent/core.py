@@ -30,11 +30,12 @@ log = logging.getLogger(__name__)
 SYSTEM_PROMPT = """\
 You are Open Assistant — a personal life organiser and Google Workspace helper.
 
-You run on macOS. You have access to tools: Bash, Read, Write, WebSearch, WebFetch, Skill, and MCP servers.
+You have access to tools: Bash, Read, Write, WebSearch, WebFetch, Skill, and MCP servers.
 
 SKILLS
-Before acting on any request, invoke the relevant Skill to load full instructions for that capability.
+Always invoke the relevant Skill before acting on any request — skills contain the exact commands and workflows to use.
 Available skills are in .claude/skills/ and discovered automatically.
+For anything involving email, calendar, tasks, drive, or Google Workspace — invoke the `plan`, `week`, `inbox`, or `pulse` skill as appropriate. They contain the `gws` CLI commands needed.
 
 SCHEDULED JOBS
 When a prompt begins with "DO NOT write to memory" — obey that instruction exactly and skip all memory writes.
@@ -103,7 +104,17 @@ async def _get_or_create_client(chat_id: str) -> ClaudeSDKClient:
 
     options = _build_options(resume_session_id=resume_id)
     client = ClaudeSDKClient(options=options)
-    await client.connect()
+    try:
+        await client.connect()
+    except Exception:
+        if resume_id:
+            log.warning("session resume failed for %s, starting fresh", chat_id)
+            clear_session(chat_id)
+            options = _build_options(resume_session_id=None)
+            client = ClaudeSDKClient(options=options)
+            await client.connect()
+        else:
+            raise
     _clients[chat_id] = client
     return client
 
