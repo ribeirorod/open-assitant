@@ -26,6 +26,8 @@ services:
       - /Users/beam/.claude/projects:/initial-memory:ro
       # GWS plain credentials (path hardcoded in gws config)
       - /Users/beam/open-assitant/gws-creds.json:/Users/beam/open-assitant/gws-creds.json:ro
+      # Claude settings — bind-mounted so changes take effect without rebuild
+      - /Users/beam/open-assitant/.claude/settings.json:/root/.claude/settings.json:ro
       # Mac filesystem access for find skill
       - /Users/beam/projects:/root/projects:ro
       - /Users/beam/Downloads:/root/Downloads:ro
