@@ -1,23 +1,46 @@
 services:
   assistant:
     build: .
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "${OA_WEBHOOK_PORT:-8080}:8080"
     env_file:
       - .env
     environment:
       - OA_BAILEYS_BRIDGE_URL=http://baileys:3100
+      # Unset API key so claude CLI uses OAuth from the named volume instead
+      - ANTHROPIC_API_KEY=
+      - CLAUDE_CODE_OAUTH_TOKEN=
     volumes:
-      # Persist sessions and schedule config
-      - assistant-data:/root/.open-assistant
-      # Mount GWS credentials if using service account
-      # - ./gws-credentials.json:/root/.config/gws/credentials.json:ro
+      # Schedules + sessions (bind mount — stays in sync with Mac)
+      - /Users/beam/.open-assistant:/root/.open-assistant
+      # GWS auth (persistent volume — run: docker exec -it ... gws auth login)
+      - gws-auth:/root/.config/gws
+      # Claude Code auth (persistent volume — run: docker exec -it ... claude login)
+      - claude-auth:/root/.claude
+      # Memory — seeded from Mac on first run
+      - /Users/beam/.claude/projects:/initial-memory:ro
+      # GWS plain credentials (path hardcoded in gws config)
+      - /Users/beam/open-assitant/gws-creds.json:/Users/beam/open-assitant/gws-creds.json:ro
+      # Mac filesystem access for find skill
+      - /Users/beam/projects:/root/projects:ro
+      - /Users/beam/Downloads:/root/Downloads:ro
+      - /Users/beam/Documents:/root/Documents:ro
     depends_on:
       - baileys
     restart: unless-stopped
 
   baileys:
     build: ./baileys-bridge
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "${BAILEYS_PORT:-3100}:3100"
     environment:
@@ -29,5 +52,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  assistant-data:
+  claude-auth:
+  gws-auth:
   baileys-auth:
