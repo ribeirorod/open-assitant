@@ -5,16 +5,21 @@ description: Use when the user sends /memory, wants to see what the assistant kn
 
 # Memory Management
 
-Two-tier memory system: local files for fast access, GDrive for long-term archiving.
+Two-tier memory system: local files for fast access, GDrive for persistent shared storage.
 
 ## Tiers
 
 | Tier | Location | Purpose |
 |---|---|---|
 | Local | `~/.open-assistant/memory/` | Active context, read every session |
-| GDrive | `open_assistant/` folder at Drive root | Archive, long-term reference |
+| GDrive | `open_assistant/memory/` folder at Drive root | Shared persistent storage, synced automatically |
 
-Always start from local. Only touch GDrive when the user asks or when archiving.
+Memory is automatically synced between local and GDrive:
+- **On startup**: latest files are pulled from GDrive.
+- **Every 5 minutes**: bi-directional sync runs in the background.
+- **After writes**: always trigger a push (see SYNC AFTER WRITES below).
+
+This ensures multiple agent instances share the same memory.
 
 ---
 
@@ -43,3 +48,13 @@ Always start from local. Only touch GDrive when the user asks or when archiving.
 - If GDrive `open_assistant/` folder exists: upload archived content as `archive-[topic].md` in that folder, then remove archived entries from the local file.
 - If no GDrive: move content to a `## Archive` section at the bottom of the local file.
 - Confirm what was moved and where.
+
+---
+
+## SYNC AFTER WRITES
+
+**After every write to a memory file** (update, add, or archive), run:
+```bash
+python -c "import asyncio; from src.memory.sync import push; asyncio.run(push(['FILENAME.md']))"
+```
+Replace `FILENAME.md` with the file(s) that were modified. This ensures other agent instances see the change immediately rather than waiting for the next periodic sync.

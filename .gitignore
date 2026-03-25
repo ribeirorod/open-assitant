@@ -24,6 +24,7 @@ service-account*.json
 # Scratch / download files
 download.html
 
-# Memory files — keep only the example
-memory/
-!memory/example/
+# Runtime memory data (the ~/.open-assistant/memory/ volume)
+# Don't ignore src/memory/ (sync module) or .claude/skills/memory/ (skill)
+**/memory/*.md
+!.claude/skills/memory/SKILL.md

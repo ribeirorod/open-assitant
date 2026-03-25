@@ -11,6 +11,7 @@ from fastapi import FastAPI
 
 from src.channels.whatsapp import router as whatsapp_router
 from src.config import settings
+from src.memory.sync import pull as memory_pull
 from src.scheduler.scheduler import start_scheduler
 
 logging.basicConfig(
@@ -32,6 +33,14 @@ def _create_api() -> FastAPI:
 
 
 async def _run() -> None:
+    # 0. Pull latest memory from GDrive before anything else
+    try:
+        pull_results = await memory_pull()
+        if pull_results:
+            log.info("startup memory pull: %s", pull_results)
+    except Exception:
+        log.warning("startup memory pull failed — continuing with local files", exc_info=True)
+
     # 1. Start the scheduler (cron tasks)
     scheduler = start_scheduler()
 
