@@ -12,11 +12,14 @@ if [ -d "$SEED_DIR" ] && [ -z "$(ls -A $MEMORY_DIR 2>/dev/null)" ]; then
     echo "Memory seeded."
 fi
 
-# Always sync project settings.json into the user-level volume so permissions
-# are applied correctly (volume may have a stale or blank settings.json)
+# Sync settings.json only if not already bind-mounted (read-only bind mount takes priority)
 mkdir -p /root/.claude
-cp /app/.claude/settings.json /root/.claude/settings.json
-echo "Settings synced."
+if [ -w /root/.claude/settings.json ] || [ ! -f /root/.claude/settings.json ]; then
+    cp /app/.claude/settings.json /root/.claude/settings.json
+    echo "Settings synced from image."
+else
+    echo "Settings bind-mounted, skipping copy."
+fi
 
 # Restore .claude.json from backup if missing (created by claude login)
 if [ ! -f "/root/.claude.json" ]; then
