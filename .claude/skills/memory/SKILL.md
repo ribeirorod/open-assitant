@@ -16,10 +16,9 @@ Two-tier memory system: local files for fast access, GDrive for persistent share
 
 Memory is automatically synced between local and GDrive:
 - **On startup**: latest files are pulled from GDrive.
-- **Every 5 minutes**: bi-directional sync runs in the background.
 - **After writes**: always trigger a push (see SYNC AFTER WRITES below).
 
-This ensures multiple agent instances share the same memory.
+This ensures memory persists across container restarts and rebuilds.
 
 ---
 
@@ -55,6 +54,6 @@ This ensures multiple agent instances share the same memory.
 
 **After every write to a memory file** (update, add, or archive), run:
 ```bash
-python -c "import asyncio; from src.memory.sync import push; asyncio.run(push(['FILENAME.md']))"
+cd /app && /app/.venv/bin/python -c "import asyncio; from src.memory.sync import push; asyncio.run(push(['FILENAME.md']))"
 ```
-Replace `FILENAME.md` with the file(s) that were modified. This ensures other agent instances see the change immediately rather than waiting for the next periodic sync.
+Replace `FILENAME.md` with the file(s) that were modified. This ensures memory survives the next container restart.
