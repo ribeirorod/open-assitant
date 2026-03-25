@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 from src.channels.whatsapp import router as whatsapp_router
 from src.config import settings
-from src.memory.sync import pull as memory_pull, sync as memory_sync
+from src.memory.sync import pull as memory_pull
 from src.scheduler.scheduler import start_scheduler
 
 logging.basicConfig(
@@ -29,25 +29,7 @@ def _create_api() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok"}
 
-    @app.post("/memory/sync")
-    async def memory_sync_endpoint() -> dict:
-        """Trigger an immediate bi-directional memory sync."""
-        results = await memory_sync()
-        return {"status": "ok", "results": results}
-
     return app
-
-
-async def _periodic_memory_sync(interval: int = 300) -> None:
-    """Background task: bi-directional memory sync every *interval* seconds."""
-    while True:
-        await asyncio.sleep(interval)
-        try:
-            results = await memory_sync()
-            if any(v not in ("pull:up-to-date",) for v in results.values()):
-                log.info("periodic memory sync: %s", results)
-        except Exception:
-            log.warning("periodic memory sync failed", exc_info=True)
 
 
 async def _run() -> None:
@@ -63,9 +45,6 @@ async def _run() -> None:
     scheduler = start_scheduler()
 
     tasks: list[asyncio.Task] = []
-
-    # Background memory sync (every 5 minutes)
-    tasks.append(asyncio.create_task(_periodic_memory_sync()))
 
     # 2. Start the webhook server (for WhatsApp inbound)
     api = _create_api()
