@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -40,7 +39,7 @@ _GDRIVE_MEMORY_SUBFOLDER = "memory"
 # ---------------------------------------------------------------------------
 
 
-async def _run_gws(*args: str, timeout: float = 30) -> tuple[int, str, str]:
+async def _run_gws(*args: str, timeout: float = 30, cwd: Path | None = None) -> tuple[int, str, str]:
     """Run a ``gws`` CLI command and return (returncode, stdout, stderr)."""
     cmd = [settings.gws_binary, *args]
     log.debug("gws command: %s", " ".join(cmd))
@@ -48,6 +47,7 @@ async def _run_gws(*args: str, timeout: float = 30) -> tuple[int, str, str]:
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        cwd=str(cwd) if cwd else None,
     )
     try:
         stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -113,7 +113,7 @@ async def _ensure_folder(name: str, parent_id: str | None = None) -> str | None:
     rc, out, err = await _run_gws(
         "drive", "files", "create",
         "--params", json.dumps({"fields": "id"}),
-        "--data", json.dumps(metadata),
+        "--json", json.dumps(metadata),
     )
     if rc != 0:
         log.error("failed to create folder %s: %s", name, err)
@@ -163,19 +163,27 @@ async def _list_remote_files(folder_id: str) -> list[dict]:
 
 
 async def _download_file(file_id: str, dest: Path) -> bool:
-    """Download a GDrive file by *file_id* to *dest*."""
+    """Download a GDrive file by *file_id* to *dest*.
+
+    gws requires --upload/-o paths to be relative within cwd, so we run
+    from the destination directory and use just the filename.
+    """
+    cwd = dest.parent
+    name = dest.name
+    # Plain Drive files: use get with alt=media
     rc, out, err = await _run_gws(
-        "drive", "files", "export",
-        "--fileId", file_id,
-        "--mimeType", "text/plain",
-        "--dest", str(dest),
+        "drive", "files", "get",
+        "--params", json.dumps({"fileId": file_id, "alt": "media"}),
+        "-o", name,
+        cwd=cwd,
     )
     if rc != 0:
-        # Try get (for non-Google-Docs files)
+        # Google Docs files: use export
         rc, out, err = await _run_gws(
-            "drive", "files", "get",
-            "--fileId", file_id,
-            "--dest", str(dest),
+            "drive", "files", "export",
+            "--params", json.dumps({"fileId": file_id, "mimeType": "text/plain"}),
+            "-o", name,
+            cwd=cwd,
         )
     return rc == 0
 
@@ -186,20 +194,22 @@ async def _upload_file(local_path: Path, folder_id: str, existing_id: str | None
     Returns the file id on success, None on failure.
     """
     if existing_id:
-        # Update existing file
+        # Update existing file — fileId via --params, upload relative path
         rc, out, err = await _run_gws(
             "drive", "files", "update",
-            "--fileId", existing_id,
-            "--file", str(local_path),
+            "--params", json.dumps({"fileId": existing_id, "fields": "id"}),
+            "--upload", local_path.name,
+            cwd=local_path.parent,
         )
     else:
         # Create new file in the folder
         metadata = json.dumps({"name": local_path.name, "parents": [folder_id]})
         rc, out, err = await _run_gws(
             "drive", "files", "create",
-            "--data", metadata,
-            "--file", str(local_path),
+            "--json", metadata,
+            "--upload", local_path.name,
             "--params", json.dumps({"fields": "id"}),
+            cwd=local_path.parent,
         )
     if rc != 0:
         log.error("upload failed for %s: %s", local_path.name, err)
