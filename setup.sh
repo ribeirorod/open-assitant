@@ -5,7 +5,8 @@ set -euo pipefail
 # open-assistant setup.sh
 # Guides a new user through first-time deployment, step by step.
 # Safe to re-run — skips steps that are already complete.
-# Requires: gum (installed automatically via brew or binary download)
+# Requires: Docker, Node.js/npm, gum (installed automatically)
+# Supported: macOS (Homebrew), Debian/Ubuntu (apt), Fedora/RHEL (dnf/yum), Linux (binary)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Minimal colors used before gum is available ──────────────────────────────
@@ -73,6 +74,10 @@ _load_state() {
   source "${STATE_FILE}"
 }
 
+# ── Docker Compose command (plugin vs standalone) ─────────────────────────────
+# Detected during step_prerequisites and used everywhere after that.
+COMPOSE=""
+
 # ── Collected values (written to .env at the end) ────────────────────────────
 CHANNELS=""
 TG_TOKEN=""
@@ -93,41 +98,94 @@ _ensure_gum() {
 
   if command -v brew &>/dev/null; then
     brew install gum
-  else
-    # Fallback: download binary from GitHub releases
-    local os arch url
-    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-    arch="$(uname -m)"
-    [[ "$arch" == "x86_64" ]] && arch="amd64"
-    [[ "$arch" == "arm64" || "$arch" == "aarch64" ]] && arch="arm64"
 
-    # Get latest release version
-    local version
-    version=$(curl -sfL "https://api.github.com/repos/charmbracelet/gum/releases/latest" \
-      | grep '"tag_name"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
-
-    if [[ -z "$version" ]]; then
-      _plain_error "Could not determine gum version. Install manually:"
-      _plain_info  "  brew install gum  (macOS)"
-      _plain_info  "  https://github.com/charmbracelet/gum/releases"
-      exit 1
+  elif command -v apt-get &>/dev/null; then
+    # Debian / Ubuntu — Charm's official apt repo
+    if command -v sudo &>/dev/null; then
+      sudo mkdir -p /etc/apt/keyrings
+      curl -fsSL https://repo.charm.sh/apt/gpg.key \
+        | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+      echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
+        | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null
+      sudo apt-get update -qq && sudo apt-get install -y gum
+    else
+      _gum_install_binary
     fi
 
-    url="https://github.com/charmbracelet/gum/releases/download/v${version}/gum_${version}_${os}_${arch}.tar.gz"
-    local tmp
-    tmp=$(mktemp -d)
-    curl -sfL "$url" | tar -xz -C "$tmp"
-    sudo mv "$tmp/gum" /usr/local/bin/gum
-    rm -rf "$tmp"
+  elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+    # Fedora / RHEL / CentOS — Charm's official RPM repo
+    if command -v sudo &>/dev/null; then
+      local repo='[charm]
+name=Charm
+baseurl=https://repo.charm.sh/yum/
+enabled=1
+gpgcheck=1
+gpgkey=https://repo.charm.sh/yum/gpg.key'
+      echo "$repo" | sudo tee /etc/yum.repos.d/charm.repo >/dev/null
+      if command -v dnf &>/dev/null; then
+        sudo dnf install -y gum
+      else
+        sudo yum install -y gum
+      fi
+    else
+      _gum_install_binary
+    fi
+
+  else
+    _gum_install_binary
   fi
 
   if ! command -v gum &>/dev/null; then
-    _plain_error "gum installation failed. Please install it manually:"
-    _plain_info  "  brew install gum"
+    _plain_error "gum installation failed. Install it manually and re-run:"
+    _plain_info  "  macOS/Linux:  brew install gum"
+    _plain_info  "  Other:        https://github.com/charmbracelet/gum/releases"
     exit 1
   fi
 
   echo -e "${GREEN}✔${RESET}  gum installed"
+}
+
+# Binary download fallback — installs to /usr/local/bin or ~/.local/bin
+_gum_install_binary() {
+  local os arch version url tmp install_dir
+
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  [[ "$arch" == "x86_64" ]]             && arch="amd64"
+  [[ "$arch" == "arm64" || "$arch" == "aarch64" ]] && arch="arm64"
+
+  version=$(curl -sfL "https://api.github.com/repos/charmbracelet/gum/releases/latest" \
+    | grep '"tag_name"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+
+  if [[ -z "$version" ]]; then
+    _plain_error "Could not fetch gum release info (check internet connection)."
+    return 1
+  fi
+
+  url="https://github.com/charmbracelet/gum/releases/download/v${version}/gum_${version}_${os}_${arch}.tar.gz"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+
+  curl -sfL "$url" | tar -xz -C "$tmp" gum 2>/dev/null \
+    || { _plain_error "Failed to download gum binary."; return 1; }
+
+  # Prefer /usr/local/bin; fall back to ~/.local/bin (no sudo needed)
+  if [[ -w /usr/local/bin ]]; then
+    install_dir="/usr/local/bin"
+  elif command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
+    sudo mv "$tmp/gum" /usr/local/bin/gum
+    return 0
+  else
+    install_dir="${HOME}/.local/bin"
+    mkdir -p "$install_dir"
+    # Warn if not in PATH
+    if [[ ":$PATH:" != *":${install_dir}:"* ]]; then
+      _plain_info "Note: add ${install_dir} to your PATH (e.g. in ~/.bashrc or ~/.profile)"
+    fi
+  fi
+
+  mv "$tmp/gum" "${install_dir}/gum"
+  chmod +x "${install_dir}/gum"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -154,19 +212,26 @@ step_prerequisites() {
   # Docker
   if ! command -v docker &>/dev/null; then
     err "Docker is not installed."
-    info "Install Docker Desktop: https://docs.docker.com/get-docker/"
+    info "Install Docker: https://docs.docker.com/get-docker/"
     exit 1
   fi
-  if ! docker compose version &>/dev/null; then
-    err "Docker Compose plugin not found."
-    info "Install Docker Desktop (includes Compose): https://docs.docker.com/get-docker/"
+
+  # Prefer 'docker compose' plugin; fall back to standalone 'docker-compose'
+  if docker compose version &>/dev/null 2>&1; then
+    COMPOSE="docker compose"
+  elif command -v docker-compose &>/dev/null; then
+    COMPOSE="docker-compose"
+  else
+    err "Docker Compose not found (neither 'docker compose' plugin nor 'docker-compose')."
+    info "Install Docker Desktop or 'docker compose' plugin: https://docs.docker.com/compose/install/"
     exit 1
   fi
+
   if ! docker info &>/dev/null 2>&1; then
-    err "Docker daemon is not running. Please start Docker Desktop and try again."
+    err "Docker daemon is not running. Please start Docker (or Docker Desktop) and try again."
     exit 1
   fi
-  success "Docker OK"
+  success "Docker OK  ($COMPOSE)"
 
   # Node / npm
   if ! command -v npm &>/dev/null; then
@@ -184,8 +249,36 @@ step_prerequisites() {
   # gws CLI
   if ! command -v gws &>/dev/null; then
     info "Installing Google Workspace CLI..."
-    gum spin --spinner dot --title "npm install -g @googleworkspace/cli..." -- \
-      npm install -g @googleworkspace/cli
+    # On Linux, global npm installs may require sudo depending on npm prefix config.
+    # Try without sudo first; fall back to user-local prefix if it fails.
+    local npm_prefix
+    npm_prefix=$(npm config get prefix 2>/dev/null || echo "")
+    if gum spin --spinner dot --title "Installing @googleworkspace/cli..." -- \
+        npm install -g @googleworkspace/cli 2>/dev/null; then
+      : # success
+    elif [[ -n "$npm_prefix" ]] && [[ -w "$npm_prefix" ]]; then
+      err "npm global install failed. Your npm prefix ($npm_prefix) is writable but the install still failed."
+      info "Try: npm install -g @googleworkspace/cli"
+      exit 1
+    else
+      # Install to user-local prefix to avoid needing sudo
+      local local_prefix="${HOME}/.npm-global"
+      mkdir -p "$local_prefix"
+      npm config set prefix "$local_prefix" 2>/dev/null || true
+      export PATH="${local_prefix}/bin:${PATH}"
+      gum spin --spinner dot --title "Installing @googleworkspace/cli (user prefix)..." -- \
+        npm install -g @googleworkspace/cli || {
+          err "npm install failed. Please install manually: npm install -g @googleworkspace/cli"
+          exit 1
+        }
+      if [[ ":$PATH:" != *":${local_prefix}/bin:"* ]]; then
+        info "Add ${local_prefix}/bin to your PATH for future sessions."
+      fi
+    fi
+  fi
+  if ! command -v gws &>/dev/null; then
+    err "gws CLI not found after install. Check your PATH."
+    exit 1
   fi
   success "gws CLI OK"
 }
@@ -427,9 +520,9 @@ step_launch() {
   mkdir -p "${HOME}/.open-assistant"
 
   gum spin --spinner dot --title "Building and starting containers (first build may take a few minutes)..." -- \
-    docker compose up -d --build || {
-      err "docker compose up failed."
-      info "Check logs with:  docker compose logs"
+    $COMPOSE up -d --build || {
+      err "$COMPOSE up failed."
+      info "Check logs with:  $COMPOSE logs"
       exit 1
     }
 
@@ -441,7 +534,7 @@ step_launch() {
     attempts=$((attempts + 1))
     if [[ $attempts -ge 30 ]]; then
       err "Assistant didn't become healthy after 60s."
-      info "Check logs:  docker compose logs assistant"
+      info "Check logs:  $COMPOSE logs assistant"
       exit 1
     fi
   done
@@ -493,12 +586,12 @@ step_whatsapp_qr() {
       success "WhatsApp linked!"
       return
     fi
-  done < <(docker compose logs -f baileys 2>&1)
+  done < <($COMPOSE logs -f baileys 2>&1)
 
   echo
   err "Log stream ended before WhatsApp was linked."
-  info "Check container:  docker compose ps baileys"
-  info "Retry:            docker compose logs -f baileys"
+  info "Check container:  $COMPOSE ps baileys"
+  info "Retry:            $COMPOSE logs -f baileys"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -519,9 +612,9 @@ step_done() {
   echo
 
   gum style --bold "Next steps:"
-  dim "Launch:         docker compose up -d --build"
-  dim "View logs:      docker compose logs -f assistant"
-  dim "Stop:           docker compose down"
+  dim "Launch:         $COMPOSE up -d --build"
+  dim "View logs:      $COMPOSE logs -f assistant"
+  dim "Stop:           $COMPOSE down"
   dim "Schedules:      ~/.open-assistant/schedules.yaml  (see README.md)"
   echo
   dim "(setup state saved at .setup-state — delete it to start fresh)"
@@ -547,7 +640,7 @@ main() {
   step_optional_keys
   _save_state
   step_write_env
-  # step_launch                   # run manually: docker compose up -d --build
+  # step_launch                   # run manually: $COMPOSE up -d --build
   # step_claude_token_exchange    # run after launch: docker exec assistant claude setup-token <token>
   step_whatsapp_qr
   step_done
