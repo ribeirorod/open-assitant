@@ -68,6 +68,11 @@ step_prerequisites() {
   fi
   success "Docker found"
 
+  if ! docker info &>/dev/null; then
+    error "Docker daemon is not running. Please start Docker Desktop and try again."
+    exit 1
+  fi
+
   # Node / npm
   if ! command -v npm &>/dev/null; then
     error "npm is not installed."
@@ -318,10 +323,10 @@ step_write_env() {
     while true; do
       prompt "Enter O, U, or S:"
       read -r choice
-      case "${choice^^}" in
-        O) break ;;
-        U) _update_env; success ".env updated"; return ;;
-        S) success ".env unchanged (skipped)"; return ;;
+      case "$choice" in
+        O|o) break ;;
+        U|u) _update_env; success ".env updated"; return ;;
+        S|s) success ".env unchanged (skipped)"; return ;;
         *) error "Please enter O, U, or S." ;;
       esac
     done
@@ -470,6 +475,11 @@ step_done() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
+  if [[ ! -f "docker-compose.yaml" ]]; then
+    error "Please run setup.sh from the open-assistant project directory."
+    exit 1
+  fi
+
   step_welcome
   step_prerequisites
   step_channel_selection
