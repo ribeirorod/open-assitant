@@ -5,26 +5,48 @@ set -euo pipefail
 # open-assistant setup.sh
 # Guides a new user through first-time deployment, step by step.
 # Safe to re-run — skips steps that are already complete.
+# Requires: gum (installed automatically via brew or binary download)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Colors ───────────────────────────────────────────────────────────────────
+# ── Minimal colors used before gum is available ──────────────────────────────
 BOLD='\033[1m'
 CYAN='\033[1;36m'
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
 RED='\033[0;31m'
 DIM='\033[2m'
 RESET='\033[0m'
 
-header()  { echo; echo -e "${CYAN}${BOLD}── $1 ──${RESET}"; echo; }
-success() { echo -e "${GREEN}✔${RESET}  $1"; }
-info()    { echo -e "${YELLOW}→${RESET}  $1"; }
-prompt()  { echo -e "${BLUE}?${RESET}  $1"; }
-dim()     { echo -e "${DIM}   $1${RESET}"; }
-error()   { echo -e "${RED}✘${RESET}  $1" >&2; }
-pause()   { echo; echo -e "${DIM}Press Enter when ready...${RESET}"; read -r _; }
+_plain_error() { echo -e "${RED}✘${RESET}  $1" >&2; }
+_plain_info()  { echo -e "${DIM}→  $1${RESET}"; }
+
+# ── gum helpers ──────────────────────────────────────────────────────────────
+header()  { echo; gum style --bold --foreground 51 "── $1 ──"; echo; }
+success() { gum style --foreground 2 "✔  $1"; }
+info()    { gum style --foreground 3 "→  $1"; }
+err()     { gum style --foreground 1 "✘  $1" >&2; }
+dim()     { gum style --faint "   $1"; }
 mask()    { local v="$1"; [[ -z "$v" ]] && echo "(not set)" || echo "${v:0:4}****"; }
+
+# ── gum input wrappers ───────────────────────────────────────────────────────
+# _ask PROMPT [CURRENT]          — plain text input; pre-fills if CURRENT given
+# _ask_secret PROMPT [CURRENT]   — masked input; shows masked hint if CURRENT given
+_ask() {
+  local label="$1" current="${2:-}"
+  if [[ -n "$current" ]]; then
+    gum input --prompt "? " --placeholder "$label" --value "$current"
+  else
+    gum input --prompt "? " --placeholder "$label"
+  fi
+}
+
+_ask_secret() {
+  local label="$1" current="${2:-}"
+  if [[ -n "$current" ]]; then
+    gum input --password --prompt "? " --placeholder "$label  [current: $(mask "$current")]"
+  else
+    gum input --password --prompt "? " --placeholder "$label"
+  fi
+}
 
 # ── State persistence ─────────────────────────────────────────────────────────
 STATE_FILE="${PWD}/.setup-state"
@@ -49,7 +71,6 @@ _load_state() {
   [[ ! -f "${STATE_FILE}" ]] && return
   # shellcheck source=/dev/null
   source "${STATE_FILE}"
-  dim "Resuming previous setup session (${STATE_FILE})"
 }
 
 # ── Collected values (written to .env at the end) ────────────────────────────
@@ -65,16 +86,64 @@ DEEPGRAM_KEY=""
 PERPLEXITY_KEY=""
 
 # ─────────────────────────────────────────────────────────────────────────────
+_ensure_gum() {
+  command -v gum &>/dev/null && return
+
+  echo -e "${CYAN}${BOLD}Installing gum (interactive CLI toolkit)...${RESET}"
+
+  if command -v brew &>/dev/null; then
+    brew install gum
+  else
+    # Fallback: download binary from GitHub releases
+    local os arch url
+    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch="$(uname -m)"
+    [[ "$arch" == "x86_64" ]] && arch="amd64"
+    [[ "$arch" == "arm64" || "$arch" == "aarch64" ]] && arch="arm64"
+
+    # Get latest release version
+    local version
+    version=$(curl -sfL "https://api.github.com/repos/charmbracelet/gum/releases/latest" \
+      | grep '"tag_name"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+
+    if [[ -z "$version" ]]; then
+      _plain_error "Could not determine gum version. Install manually:"
+      _plain_info  "  brew install gum  (macOS)"
+      _plain_info  "  https://github.com/charmbracelet/gum/releases"
+      exit 1
+    fi
+
+    url="https://github.com/charmbracelet/gum/releases/download/v${version}/gum_${version}_${os}_${arch}.tar.gz"
+    local tmp
+    tmp=$(mktemp -d)
+    curl -sfL "$url" | tar -xz -C "$tmp"
+    sudo mv "$tmp/gum" /usr/local/bin/gum
+    rm -rf "$tmp"
+  fi
+
+  if ! command -v gum &>/dev/null; then
+    _plain_error "gum installation failed. Please install it manually:"
+    _plain_info  "  brew install gum"
+    exit 1
+  fi
+
+  echo -e "${GREEN}✔${RESET}  gum installed"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 step_welcome() {
+  clear 2>/dev/null || true
   echo
-  echo -e "${CYAN}${BOLD}"
-  echo "  ╔═══════════════════════════════════════╗"
-  echo "  ║       open-assistant  setup           ║"
-  echo "  ║   Your personal AI on Telegram/WA     ║"
-  echo "  ╚═══════════════════════════════════════╝"
-  echo -e "${RESET}"
-  echo "  This script will walk you through first-time setup."
-  dim "Estimated time: ~10 minutes"
+  gum style \
+    --border rounded --border-foreground 51 \
+    --padding "1 4" --margin "0 2" \
+    --bold --foreground 51 \
+    "open-assistant  setup" \
+    "" \
+    "Your personal AI on Telegram / WhatsApp"
+  echo
+  gum style --faint "  This script walks you through first-time setup (~10 minutes)."
+  [[ -f "${STATE_FILE}" ]] && gum style --foreground 3 "  ↑ Resuming a previous session — your saved values will be pre-filled."
   echo
 }
 
@@ -84,77 +153,68 @@ step_prerequisites() {
 
   # Docker
   if ! command -v docker &>/dev/null; then
-    error "Docker is not installed."
+    err "Docker is not installed."
     info "Install Docker Desktop: https://docs.docker.com/get-docker/"
     exit 1
   fi
   if ! docker compose version &>/dev/null; then
-    error "Docker Compose plugin not found."
+    err "Docker Compose plugin not found."
     info "Install Docker Desktop (includes Compose): https://docs.docker.com/get-docker/"
     exit 1
   fi
-  success "Docker found"
-
-  if ! docker info &>/dev/null; then
-    error "Docker daemon is not running. Please start Docker Desktop and try again."
+  if ! docker info &>/dev/null 2>&1; then
+    err "Docker daemon is not running. Please start Docker Desktop and try again."
     exit 1
   fi
+  success "Docker OK"
 
   # Node / npm
   if ! command -v npm &>/dev/null; then
-    error "npm is not installed."
+    err "npm is not installed."
     info "Install Node.js (includes npm): https://nodejs.org/en/download"
     echo
-    prompt "Install Node.js, then press Enter to continue..."
-    read -r _
+    gum confirm "Press Enter once Node.js is installed to continue..." --affirmative "Continue" --negative "Quit" || exit 0
     if ! command -v npm &>/dev/null; then
-      error "npm still not found. Please install Node.js and re-run setup.sh."
+      err "npm still not found. Please install Node.js and re-run setup.sh."
       exit 1
     fi
   fi
-  success "npm found ($(npm --version))"
+  success "npm OK ($(npm --version))"
 
   # gws CLI
   if ! command -v gws &>/dev/null; then
     info "Installing Google Workspace CLI..."
-    npm install -g @googleworkspace/cli
+    gum spin --spinner dot --title "npm install -g @googleworkspace/cli..." -- \
+      npm install -g @googleworkspace/cli
   fi
-  success "gws CLI found"
+  success "gws CLI OK"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 step_channel_selection() {
-  header "Channel Selection"
+  header "Messaging Channels"
+
+  local choices=("Telegram only" "WhatsApp only" "Both Telegram and WhatsApp")
+  local default_idx=0
 
   if [[ -n "$CHANNELS" ]]; then
-    echo
-    info "Current: $CHANNELS"
-    prompt "Press Enter to keep, or enter 1/2/3 to change:"
-    read -r choice
-    [[ -z "$choice" ]] && { success "Channels: $CHANNELS"; return; }
-    case "$choice" in
-      1) CHANNELS="telegram"; success "Channels: $CHANNELS"; return ;;
-      2) CHANNELS="whatsapp"; success "Channels: $CHANNELS"; return ;;
-      3) CHANNELS="both";     success "Channels: $CHANNELS"; return ;;
+    case "$CHANNELS" in
+      telegram) default_idx=0 ;;
+      whatsapp) default_idx=1 ;;
+      both)     default_idx=2 ;;
     esac
   fi
 
-  echo "  Which messaging channels do you want to use?"
-  echo
-  echo "  [1] Telegram only"
-  echo "  [2] WhatsApp only"
-  echo "  [3] Both Telegram and WhatsApp"
-  echo
-  while true; do
-    prompt "Enter 1, 2, or 3:"
-    read -r choice
-    case "$choice" in
-      1) CHANNELS="telegram"; break ;;
-      2) CHANNELS="whatsapp"; break ;;
-      3) CHANNELS="both";     break ;;
-      *) error "Please enter 1, 2, or 3." ;;
-    esac
-  done
+  local chosen
+  chosen=$(gum choose --selected="${choices[$default_idx]}" \
+    "Telegram only" "WhatsApp only" "Both Telegram and WhatsApp")
+
+  case "$chosen" in
+    "Telegram only")              CHANNELS="telegram" ;;
+    "WhatsApp only")              CHANNELS="whatsapp" ;;
+    "Both Telegram and WhatsApp") CHANNELS="both" ;;
+  esac
+
   success "Channels: $CHANNELS"
 }
 
@@ -162,65 +222,49 @@ step_channel_selection() {
 step_telegram_setup() {
   [[ "$CHANNELS" == "whatsapp" ]] && return
 
-  header "Telegram Bot Setup"
+  header "Telegram Bot"
 
-  info "You need a Telegram bot token from @BotFather."
+  gum style --bold "You need a bot token from @BotFather."
   echo
-  echo "  Steps:"
-  echo "  1. Open Telegram and search for @BotFather"
-  dim "     or open: https://t.me/BotFather"
-  echo "  2. Send the message:  /newbot"
-  echo "  3. Follow the prompts — choose a name and username for your bot"
-  echo "  4. BotFather will reply with a token like:"
-  dim "     123456789:ABCDefGhIJKlmNoPQRsTUVwxyZ-abc123"
+  dim "1. Open Telegram → search for @BotFather  (or visit https://t.me/BotFather)"
+  dim "2. Send:  /newbot"
+  dim "3. Follow the prompts — choose a name and username for your bot"
+  dim "4. BotFather replies with a token like:  123456789:ABCDef..."
   echo
-  pause
+  gum confirm "Open BotFather and get your token, then press Enter to continue" \
+    --affirmative "I have my token" --negative "Quit" || exit 0
 
   while true; do
-    if [[ -n "$TG_TOKEN" ]]; then
-      prompt "Bot token [current: $(mask "$TG_TOKEN")] — press Enter to keep:"
-      read -r input
-      [[ -z "$input" ]] && break
-      TG_TOKEN="$input"
-    else
-      prompt "Paste your bot token:"
-      read -r TG_TOKEN
-    fi
+    TG_TOKEN=$(_ask_secret "Paste your bot token" "$TG_TOKEN")
     if [[ "$TG_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{35,}$ ]]; then
       break
     else
-      error "That doesn't look like a valid bot token. Please try again."
+      err "That doesn't look like a valid bot token — expected format: 1234567890:ABCDef..."
       TG_TOKEN=""
     fi
   done
 
   echo
-  if [[ -n "$TG_USERS" ]]; then
-    prompt "Allowed users [current: ${TG_USERS}] — press Enter to keep:"
-    read -r input
-    [[ -n "$input" ]] && TG_USERS="$input"
-  else
-    prompt "Restrict access to specific Telegram usernames? (JSON array e.g. [\"alice\",\"bob\"])"
-    prompt "Press Enter to allow all users:"
-    read -r TG_USERS
-  fi
+  gum style "Restrict access to specific Telegram usernames?"
+  dim "Format: JSON array — e.g.  [\"alice\",\"bob\"]   Leave blank to allow all users."
+  TG_USERS=$(_ask 'e.g. ["alice","bob"] or leave blank to allow all' "$TG_USERS")
 
   success "Telegram configured"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 step_gws_setup() {
-  header "Google Workspace Setup"
+  header "Google Workspace"
 
-  # ── gws auth setup (creates Cloud project + OAuth credentials) ──────────
+  # ── OAuth credentials ─────────────────────────────────────────────────────
   if [[ -f "${HOME}/.config/gws/client_secret.json" ]]; then
-    success "Google Cloud credentials already configured — skipping setup"
+    success "Google Cloud credentials already configured"
   else
     info "Setting up Google Cloud project and OAuth credentials."
-    dim "gws will open your browser and walk you through the steps."
+    dim "gws will open your browser and guide you through creating the project."
     echo
     if ! gws auth setup; then
-      error "gws auth setup failed."
+      err "gws auth setup failed."
       info "Try running manually: gws auth setup"
       info "Then re-run setup.sh"
       exit 1
@@ -228,16 +272,16 @@ step_gws_setup() {
     success "Google Cloud credentials configured"
   fi
 
-  # ── gws auth login ────────────────────────────────────────────────────────
+  # ── Auth tokens ────────────────────────────────────────────────────────────
   if [[ -d "${HOME}/.config/gws" ]] && ls "${HOME}/.config/gws/credentials"*.json &>/dev/null 2>&1; then
-    success "Google Workspace already authenticated — skipping"
+    success "Google Workspace already authenticated"
   else
-    info "Authenticating with Google Workspace — a browser window will open."
-    dim "Sign in with the Google account you want the assistant to access."
+    info "Authenticating — a browser window will open."
+    dim "Sign in with the Google account the assistant should access."
     echo
     if ! gws auth login; then
-      error "gws auth login failed."
-      info "Try running manually: gws auth login"
+      err "gws auth login failed."
+      info "Try: gws auth login"
       info "Then re-run setup.sh"
       exit 1
     fi
@@ -249,63 +293,39 @@ step_gws_setup() {
 step_claude_auth() {
   header "Claude Authentication"
 
-  echo "  How do you want to authenticate Claude?"
-  echo
-  echo "  [1] Setup-token  (recommended — uses your Claude subscription)"
-  echo "  [2] API key      (Anthropic API billing)"
-  echo
-  while true; do
-    prompt "Enter 1 or 2:"
-    read -r choice
-    case "$choice" in
-      1) CLAUDE_AUTH_TYPE="setup-token"; break ;;
-      2) CLAUDE_AUTH_TYPE="api-key";     break ;;
-      *) error "Please enter 1 or 2." ;;
-    esac
-  done
+  local chosen
+  chosen=$(gum choose \
+    --selected="$([ "$CLAUDE_AUTH_TYPE" = 'api-key' ] && echo 'API key (Anthropic billing)' || echo 'Setup-token (recommended — uses your Claude subscription)')" \
+    "Setup-token (recommended — uses your Claude subscription)" \
+    "API key (Anthropic billing)")
+
+  case "$chosen" in
+    Setup-token*) CLAUDE_AUTH_TYPE="setup-token" ;;
+    "API key"*)   CLAUDE_AUTH_TYPE="api-key" ;;
+  esac
 
   if [[ "$CLAUDE_AUTH_TYPE" == "setup-token" ]]; then
     echo
-    info "You need to generate a setup-token from Claude Code."
+    gum style --bold "Generate a setup-token on any machine where Claude Code is installed and logged in:"
     echo
-    echo "  Steps:"
-    echo "  1. On any machine where Claude Code is installed and you are logged in, run:"
-    dim "     claude setup-token"
-    echo "  2. Copy the token it prints"
+    dim "  claude setup-token"
     echo
-    pause
+    gum confirm "Run that command, copy the token, then continue" \
+      --affirmative "I have my token" --negative "Quit" || exit 0
+
     while true; do
-      if [[ -n "$CLAUDE_SETUP_TOKEN_VAL" ]]; then
-        prompt "Setup-token [current: $(mask "$CLAUDE_SETUP_TOKEN_VAL")] — press Enter to keep:"
-        read -r input
-        [[ -z "$input" ]] && break
-        CLAUDE_SETUP_TOKEN_VAL="$input"
-      else
-        prompt "Paste your setup-token:"
-        read -r CLAUDE_SETUP_TOKEN_VAL
-      fi
-      if [[ -n "$CLAUDE_SETUP_TOKEN_VAL" ]]; then
-        break
-      else
-        error "Token cannot be empty."
-      fi
+      CLAUDE_SETUP_TOKEN_VAL=$(_ask_secret "Paste your setup-token" "$CLAUDE_SETUP_TOKEN_VAL")
+      [[ -n "$CLAUDE_SETUP_TOKEN_VAL" ]] && break
+      err "Token cannot be empty."
     done
   else
     echo
     while true; do
-      if [[ -n "$ANTHROPIC_API_KEY_VAL" ]]; then
-        prompt "API key [current: $(mask "$ANTHROPIC_API_KEY_VAL")] — press Enter to keep:"
-        read -r input
-        [[ -z "$input" ]] && break
-        ANTHROPIC_API_KEY_VAL="$input"
-      else
-        prompt "Paste your Anthropic API key (starts with sk-ant-...):"
-        read -r ANTHROPIC_API_KEY_VAL
-      fi
+      ANTHROPIC_API_KEY_VAL=$(_ask_secret "Paste your Anthropic API key (starts with sk-ant-...)" "$ANTHROPIC_API_KEY_VAL")
       if [[ "$ANTHROPIC_API_KEY_VAL" =~ ^sk-ant- ]]; then
         break
       else
-        error "That doesn't look like an Anthropic API key."
+        err "That doesn't look like an Anthropic API key (expected: sk-ant-...)."
         ANTHROPIC_API_KEY_VAL=""
       fi
     done
@@ -318,50 +338,24 @@ step_claude_auth() {
 step_optional_keys() {
   header "Optional Features"
 
-  info "Press Enter to skip any key you don't have."
+  gum style "Press Enter to skip any key you don't have."
   echo
 
-  if [[ -n "$GROQ_KEY" ]]; then
-    prompt "Groq API key [current: $(mask "$GROQ_KEY")] — press Enter to keep:"
-    read -r input; [[ -n "$input" ]] && GROQ_KEY="$input"
-  else
-    prompt "Groq API key (voice transcription — recommended if you send voice messages):"
-    read -r GROQ_KEY
-  fi
+  gum style --bold "Voice transcription (for voice messages in Telegram/WhatsApp):"
+  GROQ_KEY=$(_ask_secret "Groq API key  (recommended)" "$GROQ_KEY")
+  OPENAI_KEY=$(_ask_secret "OpenAI API key  (fallback)" "$OPENAI_KEY")
+  DEEPGRAM_KEY=$(_ask_secret "Deepgram API key  (fallback)" "$DEEPGRAM_KEY")
 
-  if [[ -n "$OPENAI_KEY" ]]; then
-    prompt "OpenAI API key [current: $(mask "$OPENAI_KEY")] — press Enter to keep:"
-    read -r input; [[ -n "$input" ]] && OPENAI_KEY="$input"
-  else
-    prompt "OpenAI API key (voice transcription fallback):"
-    read -r OPENAI_KEY
-  fi
+  echo
+  gum style --bold "Web search:"
+  PERPLEXITY_KEY=$(_ask_secret "Perplexity API key  (enables web search in the assistant)" "$PERPLEXITY_KEY")
 
-  if [[ -n "$DEEPGRAM_KEY" ]]; then
-    prompt "Deepgram API key [current: $(mask "$DEEPGRAM_KEY")] — press Enter to keep:"
-    read -r input; [[ -n "$input" ]] && DEEPGRAM_KEY="$input"
-  else
-    prompt "Deepgram API key (voice transcription fallback):"
-    read -r DEEPGRAM_KEY
-  fi
-
-  if [[ -n "$PERPLEXITY_KEY" ]]; then
-    prompt "Perplexity API key [current: $(mask "$PERPLEXITY_KEY")] — press Enter to keep:"
-    read -r input; [[ -n "$input" ]] && PERPLEXITY_KEY="$input"
-  else
-    prompt "Perplexity API key (enables web search in the assistant):"
-    read -r PERPLEXITY_KEY
-  fi
-
-  success "Optional keys saved"
+  success "Optional features saved"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Append any new non-empty values from this run to an existing .env,
-# without touching lines already present.
 _update_env() {
   local pair key val
-  # List of "KEY=value" pairs to potentially append
   local pairs=(
     "CLAUDE_SETUP_TOKEN=${CLAUDE_SETUP_TOKEN_VAL}"
     "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY_VAL}"
@@ -384,25 +378,20 @@ _update_env() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 step_write_env() {
-  header "Writing .env"
+  header "Write .env"
 
   if [[ -f ".env" ]]; then
     echo
-    echo "  An existing .env file was found."
-    echo "  [O] Overwrite — replace entirely with values from this run"
-    echo "  [U] Update    — keep existing file, append any new non-empty values"
-    echo "  [S] Skip      — keep existing file unchanged"
-    echo
-    while true; do
-      prompt "Enter O, U, or S:"
-      read -r choice
-      case "$choice" in
-        O|o) break ;;
-        U|u) _update_env; success ".env updated"; return ;;
-        S|s) success ".env unchanged (skipped)"; return ;;
-        *) error "Please enter O, U, or S." ;;
-      esac
-    done
+    info "An existing .env was found."
+    local action
+    action=$(gum choose "Update — keep existing, add any new non-empty values" \
+                        "Overwrite — replace entirely with values from this run" \
+                        "Skip — leave .env unchanged")
+    case "$action" in
+      Update*)    _update_env; success ".env updated"; return ;;
+      Skip*)      success ".env unchanged"; return ;;
+      Overwrite*) ;;  # fall through to write below
+    esac
   fi
 
   {
@@ -433,29 +422,25 @@ step_write_env() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 step_launch() {
-  header "Launching open-assistant"
+  header "Launch open-assistant"
 
-  # Ensure the data directory exists with correct ownership before Docker creates it as root
   mkdir -p "${HOME}/.open-assistant"
 
-  info "Building and starting containers (this may take a few minutes on first run)..."
-  echo
+  gum spin --spinner dot --title "Building and starting containers (first build may take a few minutes)..." -- \
+    docker compose up -d --build || {
+      err "docker compose up failed."
+      info "Check logs with:  docker compose logs"
+      exit 1
+    }
 
-  if ! docker compose up -d --build; then
-    error "docker compose up failed."
-    info "Check the logs with:  docker compose logs"
-    exit 1
-  fi
-
-  # Wait for the assistant health endpoint
-  info "Waiting for assistant to be ready..."
+  info "Waiting for assistant to be healthy..."
   local port="${OA_WEBHOOK_PORT:-8080}"
   local attempts=0
   while ! curl -sf "http://localhost:${port}/health" &>/dev/null; do
     sleep 2
     attempts=$((attempts + 1))
     if [[ $attempts -ge 30 ]]; then
-      error "Assistant didn't become healthy after 60s."
+      err "Assistant didn't become healthy after 60s."
       info "Check logs:  docker compose logs assistant"
       exit 1
     fi
@@ -468,40 +453,39 @@ step_launch() {
 step_claude_token_exchange() {
   [[ "$CLAUDE_AUTH_TYPE" != "setup-token" ]] && return
 
-  header "Activating Claude Auth"
+  header "Activate Claude Auth"
 
-  info "Exchanging setup-token inside the container..."
-  if ! docker exec assistant claude setup-token "${CLAUDE_SETUP_TOKEN_VAL}"; then
-    error "Token exchange failed."
-    info "You can retry manually:"
-    dim "  docker exec -it assistant claude setup-token <your-token>"
-    info "Or authenticate interactively:"
-    dim "  docker exec -it assistant claude login"
-  else
-    success "Claude authenticated"
-  fi
+  gum spin --spinner dot --title "Exchanging setup-token inside the container..." -- \
+    docker exec assistant claude setup-token "${CLAUDE_SETUP_TOKEN_VAL}" || {
+      err "Token exchange failed."
+      info "Retry manually:"
+      dim "  docker exec -it assistant claude setup-token <your-token>"
+      info "Or authenticate interactively:"
+      dim "  docker exec -it assistant claude login"
+      return
+    }
+
+  success "Claude authenticated"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 step_whatsapp_qr() {
   [[ "$CHANNELS" == "telegram" ]] && return
 
-  header "WhatsApp Linking"
+  header "Link WhatsApp"
 
-  info "Ready to link your WhatsApp account."
+  gum style --bold "Scan the QR code with your phone to link WhatsApp."
   echo
-  echo "  Steps:"
-  echo "  1. Open WhatsApp on your phone"
-  echo "  2. Go to: Settings → Linked Devices → Link a Device"
-  echo "  3. Point your camera at the QR code that appears below"
+  dim "1. Open WhatsApp on your phone"
+  dim "2. Go to: Settings → Linked Devices → Link a Device"
+  dim "3. Point your camera at the QR code that appears below"
   echo
+  gum confirm "Ready to show the QR code" \
+    --affirmative "Show QR code" --negative "Skip for now" || return 0
+
   info "Streaming Baileys logs (Ctrl-C to abort)..."
-  dim "The QR code will appear below. Scan it, then wait for the success message."
   echo
 
-  # Stream baileys logs directly — qrcode-terminal renders the QR in-terminal.
-  # We watch for "connection open" to know linking is done.
-  # No timeout: the user can Ctrl-C if something goes wrong.
   while IFS= read -r line; do
     echo "  $line"
     if echo "$line" | grep -qi "connection open\|open connection\|linked\|ready"; then
@@ -511,41 +495,34 @@ step_whatsapp_qr() {
     fi
   done < <(docker compose logs -f baileys 2>&1)
 
-  # Only reached if the log stream ends without a success line
   echo
-  error "Log stream ended before WhatsApp was linked."
-  info "Check container status:  docker compose ps baileys"
-  info "Retry log stream:        docker compose logs -f baileys"
+  err "Log stream ended before WhatsApp was linked."
+  info "Check container:  docker compose ps baileys"
+  info "Retry:            docker compose logs -f baileys"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 step_done() {
   echo
-  echo -e "${GREEN}${BOLD}"
-  echo "  ╔═══════════════════════════════════════╗"
-  echo "  ║         Setup complete!               ║"
-  echo "  ╚═══════════════════════════════════════╝"
-  echo -e "${RESET}"
-
-  echo "  What's configured:"
-  [[ "$CHANNELS" != "whatsapp" ]] && dim "  ✔ Telegram bot"
-  [[ "$CHANNELS" != "telegram" ]] && dim "  ✔ WhatsApp (Baileys)"
-  dim "  ✔ Google Workspace"
-  dim "  ✔ Claude AI"
+  gum style \
+    --border rounded --border-foreground 2 \
+    --padding "1 4" --margin "0 2" \
+    --bold --foreground 2 \
+    "Setup complete!"
   echo
 
-  info "To add scheduled tasks, create:"
-  dim "  ~/.open-assistant/schedules.yaml"
-  dim "  See README.md for the format."
+  gum style --bold "What's configured:"
+  [[ "$CHANNELS" != "whatsapp" ]] && dim "✔ Telegram bot"
+  [[ "$CHANNELS" != "telegram" ]] && dim "✔ WhatsApp (Baileys)"
+  dim "✔ Google Workspace"
+  dim "✔ Claude AI"
   echo
-  info "To launch the assistant:"
-  dim "  docker compose up -d --build"
-  echo
-  info "To view logs:"
-  dim "  docker compose logs -f assistant"
-  echo
-  info "To stop:"
-  dim "  docker compose down"
+
+  gum style --bold "Next steps:"
+  dim "Launch:         docker compose up -d --build"
+  dim "View logs:      docker compose logs -f assistant"
+  dim "Stop:           docker compose down"
+  dim "Schedules:      ~/.open-assistant/schedules.yaml  (see README.md)"
   echo
   dim "(setup state saved at .setup-state — delete it to start fresh)"
 }
@@ -553,10 +530,11 @@ step_done() {
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
   if [[ ! -f "docker-compose.yaml" ]]; then
-    error "Please run setup.sh from the open-assistant project directory."
+    _plain_error "Please run setup.sh from the open-assistant project directory."
     exit 1
   fi
 
+  _ensure_gum
   _load_state
   step_welcome
   step_prerequisites
@@ -569,8 +547,8 @@ main() {
   step_optional_keys
   _save_state
   step_write_env
-  # step_launch            # disabled — run manually: docker compose up -d --build
-  # step_claude_token_exchange  # disabled — run after launch: docker exec assistant claude setup-token <token>
+  # step_launch                   # run manually: docker compose up -d --build
+  # step_claude_token_exchange    # run after launch: docker exec assistant claude setup-token <token>
   step_whatsapp_qr
   step_done
 }
