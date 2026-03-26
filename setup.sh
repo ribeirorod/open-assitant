@@ -282,23 +282,23 @@ step_optional_keys() {
 # Append any new non-empty values from this run to an existing .env,
 # without touching lines already present.
 _update_env() {
-  local key val
-  declare -A new_vals=(
-    [CLAUDE_SETUP_TOKEN]="${CLAUDE_SETUP_TOKEN_VAL}"
-    [ANTHROPIC_API_KEY]="${ANTHROPIC_API_KEY_VAL}"
-    [OA_TELEGRAM_BOT_TOKEN]="${TG_TOKEN}"
-    [OA_TELEGRAM_ALLOWED_USERS]="${TG_USERS}"
-    [GROQ_API_KEY]="${GROQ_KEY}"
-    [OPENAI_API_KEY]="${OPENAI_KEY}"
-    [DEEPGRAM_API_KEY]="${DEEPGRAM_KEY}"
-    [PERPLEXITY_API_KEY]="${PERPLEXITY_KEY}"
+  local pair key val
+  # List of "KEY=value" pairs to potentially append
+  local pairs=(
+    "CLAUDE_SETUP_TOKEN=${CLAUDE_SETUP_TOKEN_VAL}"
+    "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY_VAL}"
+    "OA_TELEGRAM_BOT_TOKEN=${TG_TOKEN}"
+    "OA_TELEGRAM_ALLOWED_USERS=${TG_USERS}"
+    "GROQ_API_KEY=${GROQ_KEY}"
+    "OPENAI_API_KEY=${OPENAI_KEY}"
+    "DEEPGRAM_API_KEY=${DEEPGRAM_KEY}"
+    "PERPLEXITY_API_KEY=${PERPLEXITY_KEY}"
   )
-  for key in "${!new_vals[@]}"; do
-    val="${new_vals[$key]}"
+  for pair in "${pairs[@]}"; do
+    key="${pair%%=*}"
+    val="${pair#*=}"
     [[ -z "$val" ]] && continue
-    if grep -q "^${key}=" .env; then
-      :
-    else
+    if ! grep -q "^${key}=" .env; then
       echo "${key}=${val}" >> .env
     fi
   done
