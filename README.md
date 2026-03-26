@@ -29,52 +29,73 @@ Google Workspace assistant accessible via **Telegram** and **WhatsApp**, powered
 
 ## Quick start
 
-### 1. Install uv
-
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+./setup.sh
 ```
 
-### 2. Install Google Workspace CLI
+The setup script will walk you through everything: installing dependencies, creating your Telegram bot, authenticating with Google Workspace, setting up Claude, and launching the stack.
 
-```bash
-npm install -g @googleworkspace/cli
-```
+> **Requirements:** Docker Desktop, Node.js (for the `gws` CLI), and a Claude Code installation on any machine.
 
-### 3. Install project dependencies
+> **Note:** Run all commands from the repo root directory. The setup script must be run as `./setup.sh` from within the cloned repository.
 
-```bash
-uv sync
-```
+---
 
-### 4. Configure environment
+## Manual setup
+
+<details>
+<summary>Advanced users — expand for manual steps</summary>
+
+### 1. Copy and fill in environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and fill in:
-- `ANTHROPIC_API_KEY` — your Anthropic API key (required)
-- `OA_TELEGRAM_BOT_TOKEN` — from [@BotFather](https://t.me/BotFather) (if using Telegram)
-- `OA_WHATSAPP_*` — Meta Cloud API credentials (if using WhatsApp)
+Edit `.env` and fill in your values. See `.env.example` for descriptions of each variable.
 
-### 5. Authenticate with Google Workspace
+### 2. Authenticate with Google Workspace
 
 ```bash
+npm install -g @googleworkspace/cli
 gws auth login
 ```
 
-### 6. Run
+This stores OAuth tokens at `~/.config/gws`, which the container reads at runtime.
 
+### 3. Authenticate with Claude
+
+**Option A — setup-token (recommended):**
+
+On any machine with Claude Code installed and authenticated:
 ```bash
-uv run python -m src.main
+claude setup-token
 ```
 
-Or with Docker:
+After starting the container:
+```bash
+docker exec assistant claude setup-token <your-token>
+```
+
+**Option B — API key:**
+
+Set `ANTHROPIC_API_KEY` in your `.env` file.
+
+### 4. Launch
 
 ```bash
 docker compose up --build
 ```
+
+### 5. Link WhatsApp (if using WhatsApp)
+
+```bash
+docker compose logs -f baileys
+```
+
+Scan the QR code with WhatsApp → Settings → Linked Devices → Link a Device.
+
+</details>
 
 ## Channels
 
@@ -84,11 +105,9 @@ docker compose up --build
 2. Set `OA_TELEGRAM_BOT_TOKEN` in `.env`.
 3. Optionally restrict access with `OA_TELEGRAM_ALLOWED_USERS`.
 
-### WhatsApp (Meta Cloud API)
+### WhatsApp
 
-1. Create a Meta Developer app with the WhatsApp product.
-2. Set `OA_WHATSAPP_ACCESS_TOKEN`, `OA_WHATSAPP_PHONE_NUMBER_ID`, and `OA_WHATSAPP_VERIFY_TOKEN`.
-3. Configure the webhook URL in Meta dashboard: `https://<your-host>:8080/webhook/whatsapp`.
+WhatsApp is supported via the [Baileys](https://github.com/WhiskeySockets/Baileys) bridge (WhatsApp Web protocol). No Meta developer account is needed — setup is done by scanning a QR code during `./setup.sh`.
 
 ## Scheduled tasks
 
