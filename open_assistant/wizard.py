@@ -213,6 +213,8 @@ def _step_prerequisites(questionary) -> None:
         console.print("[red]✘[/red]  npm not found.", err=True)
         console.print("[yellow]→[/yellow]  Install Node.js: https://nodejs.org/")
         answer = questionary.confirm("Press Enter once Node.js is installed").ask()
+        if answer is None:
+            raise SystemExit(0)
         if answer:
             npm_ok = subprocess.run(["npm", "--version"], capture_output=True).returncode == 0
         if not npm_ok:
@@ -409,6 +411,7 @@ def _step_claude_auth(questionary, state: WizardState) -> tuple[str, str, str]:
                     raise SystemExit(0)
                 if raw.strip() == "":
                     api_key = state.anthropic_api_key
+                    break  # keep existing — skip format check
                 else:
                     api_key = raw.strip()
             else:
@@ -487,6 +490,11 @@ def _step_write_env(questionary, project_dir: Path, state: WizardState) -> None:
         elif action == "update" and env_key in existing:
             lines.append(f"{env_key}={existing[env_key]}\n")
 
+    # Always clear both auth keys from existing before writing —
+    # prevents stale credential persisting when user switches auth type.
+    existing.pop("CLAUDE_SETUP_TOKEN", None)
+    existing.pop("ANTHROPIC_API_KEY", None)
+
     if state.claude_auth_type == "setup-token":
         _put("CLAUDE_SETUP_TOKEN", state.claude_setup_token)
     else:
@@ -531,12 +539,16 @@ def _step_whatsapp_qr(questionary, project_dir: Path) -> None:
             text=True,
         )
         linked = False
-        for line in proc.stdout:
-            console.print(line, end="")
-            if re.search(r"connection open|linked|ready", line, re.IGNORECASE):
-                linked = True
-                proc.terminate()
-                break
+        try:
+            for line in proc.stdout:
+                console.print(line, end="")
+                if re.search(r"connection open|linked|ready", line, re.IGNORECASE):
+                    linked = True
+                    break
+        except KeyboardInterrupt:
+            console.print("\n[yellow]→[/yellow]  Interrupted — link WhatsApp manually later.")
+        finally:
+            proc.terminate()
 
         if linked:
             console.print("[green]✔[/green]  WhatsApp linked!")
