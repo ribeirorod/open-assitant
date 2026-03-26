@@ -17,21 +17,21 @@ services:
       - CLAUDE_CODE_OAUTH_TOKEN=
     volumes:
       # Schedules + sessions (bind mount — stays in sync with Mac)
-      - /Users/beam/.open-assistant:/root/.open-assistant
-      # GWS auth (persistent volume — run: docker exec -it ... gws auth login)
-      - gws-auth:/root/.config/gws
-      # Claude Code auth (persistent volume — run: docker exec -it ... claude login)
+      - ${HOME}/.open-assistant:/root/.open-assistant
+      # GWS auth — tokens live on the host at ~/.config/gws (run `gws auth login` before starting)
+      - ${HOME}/.config/gws:/root/.config/gws:ro
+      # Claude Code auth (persistent volume — exchanged via setup.sh using claude setup-token)
       - claude-auth:/root/.claude
       # Memory — seeded from Mac on first run
-      - /Users/beam/.claude/projects:/initial-memory:ro
+      - ${HOME}/.claude/projects:/initial-memory:ro
       # GWS plain credentials (path hardcoded in gws config)
-      - /Users/beam/open-assitant/gws-creds.json:/Users/beam/open-assitant/gws-creds.json:ro
+      - ${PWD}/gws-creds.json:/root/gws-creds.json:ro
       # Claude settings — bind-mounted so changes take effect without rebuild
-      - /Users/beam/open-assitant/.claude/settings.json:/root/.claude/settings.json:ro
+      - ${PWD}/.claude/settings.json:/root/.claude/settings.json:ro
       # Mac filesystem access for find skill
-      - /Users/beam/projects:/root/projects:ro
-      - /Users/beam/Downloads:/root/Downloads:ro
-      - /Users/beam/Documents:/root/Documents:ro
+      - ${HOME}/projects:/root/projects:ro
+      - ${HOME}/Downloads:/root/Downloads:ro
+      - ${HOME}/Documents:/root/Documents:ro
     depends_on:
       - baileys
     restart: unless-stopped
@@ -55,5 +55,4 @@ services:
 
 volumes:
   claude-auth:
-  gws-auth:
   baileys-auth:
