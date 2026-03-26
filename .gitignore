@@ -28,3 +28,4 @@ download.html
 # Don't ignore src/memory/ (sync module) or .claude/skills/memory/ (skill)
 **/memory/*.md
 !.claude/skills/memory/SKILL.md
+.worktrees/
