@@ -30,7 +30,6 @@ QUICK START (agent / non-interactive)
 from __future__ import annotations
 
 import importlib.resources
-import os
 import shutil
 import subprocess
 import sys
@@ -95,7 +94,7 @@ def init(
     dest.mkdir(parents=True, exist_ok=True)
 
     data_pkg = importlib.resources.files("open_assistant._data")
-    files = ["docker-compose.yaml", ".env.example", "setup.sh"]
+    files = ["docker-compose.yaml", ".env.example"]
 
     for filename in files:
         target = dest / filename
@@ -105,8 +104,6 @@ def init(
         src_file = data_pkg / filename
         with importlib.resources.as_file(src_file) as src_path:
             shutil.copy2(src_path, target)
-        if filename == "setup.sh":
-            target.chmod(0o755)
         console.print(f"  [green]✔[/green]  {filename}")
 
     console.print(f"\n[bold]Project initialised at {dest}[/bold]")
@@ -231,38 +228,22 @@ def setup(
         )
         return
 
-    # Interactive: delegate to setup.sh
-    setup_script = d / "setup.sh"
-    if not setup_script.exists():
-        console.print(
-            "[red]✘[/red]  setup.sh not found. Run [cyan]open-assistant init[/cyan] first.",
-            err=True,
-        )
-        raise typer.Exit(1)
+    # Interactive: run Python wizard
+    from open_assistant.wizard import run as run_wizard
 
-    # Pass any pre-supplied flags as env vars so setup.sh can pre-fill them
-    env = os.environ.copy()
-    if channels:
-        env["CHANNELS"] = channels
-    if telegram_token:
-        env["TG_TOKEN"] = telegram_token
-    if telegram_users:
-        env["TG_USERS"] = telegram_users
-    if claude_setup_token:
-        env["CLAUDE_SETUP_TOKEN_VAL"] = claude_setup_token
-    if anthropic_api_key:
-        env["ANTHROPIC_API_KEY_VAL"] = anthropic_api_key
-    if groq_key:
-        env["GROQ_KEY"] = groq_key
-    if openai_key:
-        env["OPENAI_KEY"] = openai_key
-    if deepgram_key:
-        env["DEEPGRAM_KEY"] = deepgram_key
-    if perplexity_key:
-        env["PERPLEXITY_KEY"] = perplexity_key
+    prefill = {k: v for k, v in {
+        "channels": channels,
+        "tg_token": telegram_token,
+        "tg_users": telegram_users,
+        "claude_setup_token": claude_setup_token,
+        "anthropic_api_key": anthropic_api_key,
+        "groq_key": groq_key,
+        "openai_key": openai_key,
+        "deepgram_key": deepgram_key,
+        "perplexity_key": perplexity_key,
+    }.items() if v}
 
-    result = subprocess.run(["bash", str(setup_script)], cwd=d, env=env)
-    raise typer.Exit(result.returncode)
+    run_wizard(d, prefill)
 
 
 def _write_env_non_interactive(
