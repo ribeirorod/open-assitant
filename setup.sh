@@ -24,6 +24,33 @@ prompt()  { echo -e "${BLUE}?${RESET}  $1"; }
 dim()     { echo -e "${DIM}   $1${RESET}"; }
 error()   { echo -e "${RED}✘${RESET}  $1" >&2; }
 pause()   { echo; echo -e "${DIM}Press Enter when ready...${RESET}"; read -r _; }
+mask()    { local v="$1"; [[ -z "$v" ]] && echo "(not set)" || echo "${v:0:4}****"; }
+
+# ── State persistence ─────────────────────────────────────────────────────────
+STATE_FILE="${PWD}/.setup-state"
+
+_save_state() {
+  {
+    echo "CHANNELS=${CHANNELS}"
+    echo "TG_TOKEN=${TG_TOKEN}"
+    echo "TG_USERS=${TG_USERS}"
+    echo "CLAUDE_AUTH_TYPE=${CLAUDE_AUTH_TYPE}"
+    echo "CLAUDE_SETUP_TOKEN_VAL=${CLAUDE_SETUP_TOKEN_VAL}"
+    echo "ANTHROPIC_API_KEY_VAL=${ANTHROPIC_API_KEY_VAL}"
+    echo "GROQ_KEY=${GROQ_KEY}"
+    echo "OPENAI_KEY=${OPENAI_KEY}"
+    echo "DEEPGRAM_KEY=${DEEPGRAM_KEY}"
+    echo "PERPLEXITY_KEY=${PERPLEXITY_KEY}"
+  } > "${STATE_FILE}"
+  chmod 600 "${STATE_FILE}"
+}
+
+_load_state() {
+  [[ ! -f "${STATE_FILE}" ]] && return
+  # shellcheck source=/dev/null
+  source "${STATE_FILE}"
+  dim "Resuming previous setup session (${STATE_FILE})"
+}
 
 # ── Collected values (written to .env at the end) ────────────────────────────
 CHANNELS=""
@@ -99,6 +126,19 @@ step_prerequisites() {
 step_channel_selection() {
   header "Channel Selection"
 
+  if [[ -n "$CHANNELS" ]]; then
+    echo
+    info "Current: $CHANNELS"
+    prompt "Press Enter to keep, or enter 1/2/3 to change:"
+    read -r choice
+    [[ -z "$choice" ]] && { success "Channels: $CHANNELS"; return; }
+    case "$choice" in
+      1) CHANNELS="telegram"; success "Channels: $CHANNELS"; return ;;
+      2) CHANNELS="whatsapp"; success "Channels: $CHANNELS"; return ;;
+      3) CHANNELS="both";     success "Channels: $CHANNELS"; return ;;
+    esac
+  fi
+
   echo "  Which messaging channels do you want to use?"
   echo
   echo "  [1] Telegram only"
@@ -137,19 +177,33 @@ step_telegram_setup() {
   pause
 
   while true; do
-    prompt "Paste your bot token:"
-    read -r TG_TOKEN
+    if [[ -n "$TG_TOKEN" ]]; then
+      prompt "Bot token [current: $(mask "$TG_TOKEN")] — press Enter to keep:"
+      read -r input
+      [[ -z "$input" ]] && break
+      TG_TOKEN="$input"
+    else
+      prompt "Paste your bot token:"
+      read -r TG_TOKEN
+    fi
     if [[ "$TG_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{35,}$ ]]; then
       break
     else
       error "That doesn't look like a valid bot token. Please try again."
+      TG_TOKEN=""
     fi
   done
 
   echo
-  prompt "Restrict access to specific Telegram usernames? (JSON array e.g. [\"alice\",\"bob\"])"
-  prompt "Press Enter to allow all users:"
-  read -r TG_USERS
+  if [[ -n "$TG_USERS" ]]; then
+    prompt "Allowed users [current: ${TG_USERS}] — press Enter to keep:"
+    read -r input
+    [[ -n "$input" ]] && TG_USERS="$input"
+  else
+    prompt "Restrict access to specific Telegram usernames? (JSON array e.g. [\"alice\",\"bob\"])"
+    prompt "Press Enter to allow all users:"
+    read -r TG_USERS
+  fi
 
   success "Telegram configured"
 }
@@ -221,23 +275,38 @@ step_claude_auth() {
     echo
     pause
     while true; do
-      prompt "Paste your setup-token:"
-      read -r CLAUDE_SETUP_TOKEN_VAL
+      if [[ -n "$CLAUDE_SETUP_TOKEN_VAL" ]]; then
+        prompt "Setup-token [current: $(mask "$CLAUDE_SETUP_TOKEN_VAL")] — press Enter to keep:"
+        read -r input
+        [[ -z "$input" ]] && break
+        CLAUDE_SETUP_TOKEN_VAL="$input"
+      else
+        prompt "Paste your setup-token:"
+        read -r CLAUDE_SETUP_TOKEN_VAL
+      fi
       if [[ -n "$CLAUDE_SETUP_TOKEN_VAL" ]]; then
         break
       else
-        error "Token cannot be empty. Please paste the token."
+        error "Token cannot be empty."
       fi
     done
   else
     echo
     while true; do
-      prompt "Paste your Anthropic API key (starts with sk-ant-...):"
-      read -r ANTHROPIC_API_KEY_VAL
+      if [[ -n "$ANTHROPIC_API_KEY_VAL" ]]; then
+        prompt "API key [current: $(mask "$ANTHROPIC_API_KEY_VAL")] — press Enter to keep:"
+        read -r input
+        [[ -z "$input" ]] && break
+        ANTHROPIC_API_KEY_VAL="$input"
+      else
+        prompt "Paste your Anthropic API key (starts with sk-ant-...):"
+        read -r ANTHROPIC_API_KEY_VAL
+      fi
       if [[ "$ANTHROPIC_API_KEY_VAL" =~ ^sk-ant- ]]; then
         break
       else
-        error "That doesn't look like an Anthropic API key. It should start with sk-ant-"
+        error "That doesn't look like an Anthropic API key."
+        ANTHROPIC_API_KEY_VAL=""
       fi
     done
   fi
@@ -252,17 +321,37 @@ step_optional_keys() {
   info "Press Enter to skip any key you don't have."
   echo
 
-  prompt "Groq API key (voice transcription — recommended if you send voice messages):"
-  read -r GROQ_KEY
+  if [[ -n "$GROQ_KEY" ]]; then
+    prompt "Groq API key [current: $(mask "$GROQ_KEY")] — press Enter to keep:"
+    read -r input; [[ -n "$input" ]] && GROQ_KEY="$input"
+  else
+    prompt "Groq API key (voice transcription — recommended if you send voice messages):"
+    read -r GROQ_KEY
+  fi
 
-  prompt "OpenAI API key (voice transcription fallback):"
-  read -r OPENAI_KEY
+  if [[ -n "$OPENAI_KEY" ]]; then
+    prompt "OpenAI API key [current: $(mask "$OPENAI_KEY")] — press Enter to keep:"
+    read -r input; [[ -n "$input" ]] && OPENAI_KEY="$input"
+  else
+    prompt "OpenAI API key (voice transcription fallback):"
+    read -r OPENAI_KEY
+  fi
 
-  prompt "Deepgram API key (voice transcription fallback):"
-  read -r DEEPGRAM_KEY
+  if [[ -n "$DEEPGRAM_KEY" ]]; then
+    prompt "Deepgram API key [current: $(mask "$DEEPGRAM_KEY")] — press Enter to keep:"
+    read -r input; [[ -n "$input" ]] && DEEPGRAM_KEY="$input"
+  else
+    prompt "Deepgram API key (voice transcription fallback):"
+    read -r DEEPGRAM_KEY
+  fi
 
-  prompt "Perplexity API key (enables web search in the assistant):"
-  read -r PERPLEXITY_KEY
+  if [[ -n "$PERPLEXITY_KEY" ]]; then
+    prompt "Perplexity API key [current: $(mask "$PERPLEXITY_KEY")] — press Enter to keep:"
+    read -r input; [[ -n "$input" ]] && PERPLEXITY_KEY="$input"
+  else
+    prompt "Perplexity API key (enables web search in the assistant):"
+    read -r PERPLEXITY_KEY
+  fi
 
   success "Optional keys saved"
 }
@@ -458,6 +547,7 @@ step_done() {
   info "To stop:"
   dim "  docker compose down"
   echo
+  dim "(setup state saved at .setup-state — delete it to start fresh)"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -467,13 +557,17 @@ main() {
     exit 1
   fi
 
+  _load_state
   step_welcome
   step_prerequisites
   step_channel_selection
   step_telegram_setup
+  _save_state
   step_gws_setup
   step_claude_auth
+  _save_state
   step_optional_keys
+  _save_state
   step_write_env
   # step_launch            # disabled — run manually: docker compose up -d --build
   # step_claude_token_exchange  # disabled — run after launch: docker exec assistant claude setup-token <token>

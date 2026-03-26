@@ -21,6 +21,9 @@ gws-creds.json
 token.json
 service-account*.json
 
+# Setup state — stores credentials between runs, never commit
+.setup-state
+
 # Scratch / download files
 download.html
 
