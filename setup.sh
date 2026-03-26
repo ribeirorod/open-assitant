@@ -158,40 +158,24 @@ step_telegram_setup() {
 step_gws_setup() {
   header "Google Workspace Setup"
 
-  # ── gws-creds.json ──────────────────────────────────────────────────────
-  if [[ -f "${PWD}/gws-creds.json" ]]; then
-    success "gws-creds.json already present — skipping"
+  # ── gws auth setup (creates Cloud project + OAuth credentials) ──────────
+  if [[ -f "${HOME}/.config/gws/client_secret.json" ]]; then
+    success "Google Cloud credentials already configured — skipping setup"
   else
-    info "You need an OAuth 2.0 client credentials file from Google Cloud."
+    info "Setting up Google Cloud project and OAuth credentials."
+    dim "gws will open your browser and walk you through the steps."
     echo
-    echo "  Steps:"
-    echo "  1. Go to: https://console.cloud.google.com"
-    echo "  2. Create a project (or select an existing one)"
-    echo "  3. Go to: APIs & Services → Library"
-    echo "     Enable these APIs:"
-    dim "     Gmail API, Google Calendar API, Google Drive API,"
-    dim "     Google Tasks API, Google Docs API, Google Sheets API"
-    echo "  4. Go to: APIs & Services → Credentials"
-    echo "  5. Click: Create Credentials → OAuth 2.0 Client ID"
-    echo "  6. Application type: Desktop app — give it any name"
-    echo "  7. Click Download JSON"
-    echo "  8. Rename the downloaded file to:  gws-creds.json"
-    echo "     and move it into this directory: ${PWD}"
-    echo
-
-    while true; do
-      pause
-      if [[ -f "${PWD}/gws-creds.json" ]]; then
-        break
-      else
-        error "gws-creds.json not found in ${PWD}. Please move the file and press Enter."
-      fi
-    done
-    success "gws-creds.json found"
+    if ! gws auth setup; then
+      error "gws auth setup failed."
+      info "Try running manually: gws auth setup"
+      info "Then re-run setup.sh"
+      exit 1
+    fi
+    success "Google Cloud credentials configured"
   fi
 
   # ── gws auth login ────────────────────────────────────────────────────────
-  if [[ -d "${HOME}/.config/gws" ]] && ls "${HOME}/.config/gws"/*.json &>/dev/null 2>&1; then
+  if [[ -d "${HOME}/.config/gws" ]] && ls "${HOME}/.config/gws/credentials"*.json &>/dev/null 2>&1; then
     success "Google Workspace already authenticated — skipping"
   else
     info "Authenticating with Google Workspace — a browser window will open."

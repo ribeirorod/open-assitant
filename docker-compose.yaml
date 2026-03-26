@@ -24,8 +24,6 @@ services:
       - claude-auth:/root/.claude
       # Memory — seeded from Mac on first run
       - ${HOME}/.claude/projects:/initial-memory:ro
-      # GWS plain credentials (path hardcoded in gws config)
-      - ${PWD}/gws-creds.json:/root/gws-creds.json:ro
       # Claude settings — bind-mounted so changes take effect without rebuild
       - ${PWD}/.claude/settings.json:/root/.claude/settings.json:ro
       # Host filesystem access for find skill
