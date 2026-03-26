@@ -465,6 +465,9 @@ step_done() {
   dim "  ~/.open-assistant/schedules.yaml"
   dim "  See README.md for the format."
   echo
+  info "To launch the assistant:"
+  dim "  docker compose up -d --build"
+  echo
   info "To view logs:"
   dim "  docker compose logs -f assistant"
   echo
@@ -488,8 +491,8 @@ main() {
   step_claude_auth
   step_optional_keys
   step_write_env
-  step_launch
-  step_claude_token_exchange
+  # step_launch            # disabled — run manually: docker compose up -d --build
+  # step_claude_token_exchange  # disabled — run after launch: docker exec assistant claude setup-token <token>
   step_whatsapp_qr
   step_done
 }
