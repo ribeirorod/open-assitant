@@ -53,7 +53,7 @@ async def _run() -> None:
         host=settings.webhook_host,
         port=settings.webhook_port,
         log_level="info",
-        reload=True,
+        reload=False,
     )
     server = uvicorn.Server(config)
     tasks.append(asyncio.create_task(server.serve()))
