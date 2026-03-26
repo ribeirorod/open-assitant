@@ -141,7 +141,7 @@ src/
 ├── channels/
 │   ├── telegram.py          # Telegram bot (python-telegram-bot)
 │   ├── telegram_notify.py   # Outbound Telegram for scheduler
-│   └── whatsapp.py          # WhatsApp Cloud API (FastAPI router)
+│   └── whatsapp.py          # WhatsApp Baileys bridge (FastAPI router)
 ├── scheduler/
 │   └── scheduler.py         # APScheduler cron jobs
 └── tools/                   # (extensible) custom MCP tools
