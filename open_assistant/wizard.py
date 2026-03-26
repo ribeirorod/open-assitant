@@ -68,6 +68,7 @@ def _save_state(state: WizardState, path: Path) -> None:
         val = getattr(state, field.name)
         lines.append(f"{key}={val}\n")
     path.write_text("".join(lines))
+    path.chmod(0o600)
 
 
 def _load_state(path: Path) -> WizardState:
@@ -239,11 +240,11 @@ def _step_prerequisites(questionary) -> None:
 def _step_channels(questionary, state: WizardState) -> str:
     console.rule("[bold cyan]── Channels ──[/bold cyan]")
 
-    choices = ["Telegram only", "WhatsApp only", "Both Telegram and WhatsApp"]
+    choices = ["Telegram only", "WhatsApp only", "Both"]
     current_map = {
         "telegram": "Telegram only",
         "whatsapp": "WhatsApp only",
-        "both": "Both Telegram and WhatsApp",
+        "both": "Both",
     }
     default = current_map.get(state.channels)
 
@@ -256,7 +257,7 @@ def _step_channels(questionary, state: WizardState) -> str:
     if answer is None:
         raise SystemExit(0)
 
-    return {"Telegram only": "telegram", "WhatsApp only": "whatsapp", "Both Telegram and WhatsApp": "both"}[answer]
+    return {"Telegram only": "telegram", "WhatsApp only": "whatsapp", "Both": "both"}[answer]
 
 
 def _step_telegram(questionary, state: WizardState) -> tuple[str, str]:
