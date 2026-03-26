@@ -16,7 +16,7 @@ services:
       - ANTHROPIC_API_KEY=
       - CLAUDE_CODE_OAUTH_TOKEN=
     volumes:
-      # Schedules + sessions (bind mount — stays in sync with Mac)
+      # Schedules + sessions (bind mount — stays in sync with host)
       - ${HOME}/.open-assistant:/root/.open-assistant
       # GWS auth — tokens live on the host at ~/.config/gws (run `gws auth login` before starting)
       - ${HOME}/.config/gws:/root/.config/gws:ro
@@ -28,7 +28,7 @@ services:
       - ${PWD}/gws-creds.json:/root/gws-creds.json:ro
       # Claude settings — bind-mounted so changes take effect without rebuild
       - ${PWD}/.claude/settings.json:/root/.claude/settings.json:ro
-      # Mac filesystem access for find skill
+      # Host filesystem access for find skill
       - ${HOME}/projects:/root/projects:ro
       - ${HOME}/Downloads:/root/Downloads:ro
       - ${HOME}/Documents:/root/Documents:ro
