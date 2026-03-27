@@ -32,4 +32,5 @@ download.html
 **/memory/*.md
 !.claude/skills/memory/SKILL.md
 .worktrees/
+.planning/
 docs/
