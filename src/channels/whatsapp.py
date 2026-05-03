@@ -181,15 +181,23 @@ async def inbound_from_bridge(request: Request) -> dict:
     msg_type = msg.get("type", "unknown")
     text = msg.get("text")
     msg_id = msg.get("id")
+    image_data: str | None = msg.get("imageData")
+    image_mimetype: str = (msg.get("media") or {}).get("mimetype") or "image/jpeg"
 
-    # Only process text messages for now; media handling can be added later
-    if msg_type != "text" or not text:
-        log.debug("ignoring non-text message type=%s from=%s", msg_type, sender)
+    if msg_type == "image" and image_data:
+        log.info("whatsapp image from=%s caption=%s", sender, (text or "")[:80])
+        response = await ask_agent(
+            text or "What's in this image?",
+            chat_id=f"wa:{sender}",
+            image_b64=image_data,
+            image_mimetype=image_mimetype,
+        )
+    elif msg_type == "text" and text:
+        log.info("whatsapp from=%s text=%s", sender, text[:80])
+        response = await ask_agent(text, chat_id=f"wa:{sender}")
+    else:
+        log.debug("ignoring message type=%s from=%s", msg_type, sender)
         return {"status": "ignored"}
-
-    log.info("whatsapp from=%s text=%s", sender, text[:80])
-
-    response = await ask_agent(text, chat_id=f"wa:{sender}")
     await send_text(sender, response, quoted_id=msg_id)
 
     return {"status": "ok"}

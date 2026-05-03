@@ -10,6 +10,7 @@
 
 import makeWASocket, {
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
@@ -89,15 +90,34 @@ async function connectWhatsApp() {
         }
       }
 
+      const msgType = detectMessageType(msg);
+
+      // Download image bytes so the Python agent can send them to Claude
+      let imageData = null;
+      if (msgType === "image") {
+        try {
+          const buffer = await downloadMediaMessage(
+            msg,
+            "buffer",
+            {},
+            { logger, reuploadRequest: sock.updateMediaMessage },
+          );
+          imageData = buffer.toString("base64");
+        } catch (e) {
+          console.error("image download failed:", e.message);
+        }
+      }
+
       const payload = {
         id: msg.key.id,
         from: msg.key.remoteJid,
         participant: msg.key.participant || null,
         pushName: msg.pushName || null,
         timestamp: msg.messageTimestamp,
-        type: detectMessageType(msg),
+        type: msgType,
         text: extractText(msg),
         media: extractMediaInfo(msg),
+        imageData,
         quotedMessage: msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
           ? { id: msg.message.extendedTextMessage.contextInfo.stanzaId }
           : null,

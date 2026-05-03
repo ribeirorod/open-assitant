@@ -130,7 +130,36 @@ def _extract_text(message: object) -> str | None:
     return None
 
 
-async def ask_agent(user_message: str, chat_id: str) -> str:
+async def _image_prompt(
+    user_message: str, image_b64: str, image_mimetype: str
+):
+    """Yield a single user message dict with image + text content blocks."""
+    yield {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": image_mimetype,
+                        "data": image_b64,
+                    },
+                },
+                {"type": "text", "text": user_message},
+            ],
+        },
+        "parent_tool_use_id": None,
+    }
+
+
+async def ask_agent(
+    user_message: str,
+    chat_id: str,
+    image_b64: str | None = None,
+    image_mimetype: str = "image/jpeg",
+) -> str:
     """Send *user_message* to the Claude agent and return the text response.
 
     Each ``chat_id`` maps to its own ``ClaudeSDKClient``.  Within a process
@@ -141,7 +170,10 @@ async def ask_agent(user_message: str, chat_id: str) -> str:
     log.info("agent request chat_id=%s msg=%s", chat_id, user_message[:80])
 
     client = await _get_or_create_client(chat_id)
-    await client.query(user_message)
+    if image_b64:
+        await client.query(_image_prompt(user_message, image_b64, image_mimetype))
+    else:
+        await client.query(user_message)
 
     parts: list[str] = []
     session_id: str | None = None
