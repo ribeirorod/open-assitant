@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # --- Perplexity MCP ---
     perplexity_api_key: str = Field(default="", validation_alias="PERPLEXITY_API_KEY")
 
+    # --- Linear ---
+    linear_api_key: str = Field(default="", validation_alias="LINEAR_API_KEY")
+
     # --- Voice (STT + TTS) — read without OA_ prefix ---
     groq_api_key: str = Field(default="", validation_alias="GROQ_API_KEY")
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
