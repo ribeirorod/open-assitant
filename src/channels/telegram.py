@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import pathlib
 from datetime import datetime, timezone
@@ -44,6 +45,7 @@ log = logging.getLogger(__name__)
 
 MAX_TG_MESSAGE_LENGTH = 4090  # slight buffer under the 4096 hard limit
 MISSED_MESSAGE_THRESHOLD = 300  # seconds — messages older than this at receive time are "missed"
+AGENT_TIMEOUT = 300  # seconds — kill agent call if it takes longer than this
 
 _groq = groq.AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
 _openai = openai.AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
@@ -94,10 +96,18 @@ def _split_mdv2(text: str, max_len: int = MAX_TG_MESSAGE_LENGTH) -> list[str]:
 
 
 async def _send_markdown(update: Update, markdown: str) -> None:
-    """Convert markdown to MarkdownV2 and send in logical chunks."""
-    mdv2 = markdownify(markdown)
-    for chunk in _split_mdv2(mdv2):
-        await update.message.reply_text(chunk, parse_mode="MarkdownV2")
+    """Convert markdown to MarkdownV2 and send in logical chunks.
+
+    Falls back to plain text if MarkdownV2 parsing fails.
+    """
+    try:
+        mdv2 = markdownify(markdown)
+        for chunk in _split_mdv2(mdv2):
+            await update.message.reply_text(chunk, parse_mode="MarkdownV2")
+    except Exception:
+        log.warning("MarkdownV2 send failed, falling back to plain text")
+        for chunk in _split_mdv2(markdown):
+            await update.message.reply_text(chunk)
 
 
 async def _keep_typing(update: Update, stop: asyncio.Event) -> None:
@@ -118,7 +128,11 @@ async def _dispatch(update: Update, prompt: str) -> None:
     stop = asyncio.Event()
     typing_task = asyncio.create_task(_keep_typing(update, stop))
     try:
-        response = await ask_agent(prompt, chat_id)
+        async with asyncio.timeout(AGENT_TIMEOUT):
+            response = await ask_agent(prompt, chat_id)
+    except TimeoutError:
+        log.error("agent timed out after %ds for chat %s", AGENT_TIMEOUT, chat_id)
+        response = "Request timed out. Please try again or /reset the session."
     finally:
         stop.set()
         typing_task.cancel()
@@ -192,6 +206,11 @@ async def _find(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def _inbox(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await _dispatch(update, _skill("inbox"))
+
+
+async def _linear(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    args = " ".join(ctx.args) if ctx.args else ""
+    await _dispatch(update, _skill("linear", args=args))
 
 
 async def _start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -318,10 +337,58 @@ async def _handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
     stop = asyncio.Event()
     typing_task = asyncio.create_task(_keep_typing(update, stop))
     try:
-        response = await ask_agent(text, chat_id)
+        async with asyncio.timeout(AGENT_TIMEOUT):
+            response = await ask_agent(text, chat_id)
+    except TimeoutError:
+        log.error("agent timed out after %ds for chat %s", AGENT_TIMEOUT, chat_id)
+        response = "Request timed out. Please try again or /reset the session."
     finally:
         stop.set()
         typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
+
+    await _send_markdown(update, response)
+    _record_reply(chat_id, update.message.message_id)
+
+
+async def _handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle photo messages: download, base64-encode, forward to agent."""
+    if not _is_allowed(update):
+        return
+
+    chat_id = str(update.effective_chat.id)
+
+    if _is_missed_message(update):
+        await update.message.reply_text(
+            'I may have missed an image while I was offline.\nDo you still need my help with this?'
+        )
+        _record_reply(chat_id, update.message.message_id)
+        return
+
+    # Telegram sends multiple sizes; use the largest (last in list)
+    photo = update.message.photo[-1]
+    caption = update.message.caption or "What's in this image?"
+
+    stop = asyncio.Event()
+    typing_task = asyncio.create_task(_keep_typing(update, stop))
+    try:
+        image_bytes = await _download_file(ctx, photo.file_id)
+        image_b64 = base64.b64encode(image_bytes).decode()
+        async with asyncio.timeout(AGENT_TIMEOUT):
+            response = await ask_agent(caption, chat_id, image_b64=image_b64, image_mimetype="image/jpeg")
+    except TimeoutError:
+        log.error("agent timed out after %ds for chat %s", AGENT_TIMEOUT, chat_id)
+        response = "Request timed out. Please try again or /reset the session."
+    finally:
+        stop.set()
+        typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
 
     await _send_markdown(update, response)
     _record_reply(chat_id, update.message.message_id)
@@ -359,10 +426,18 @@ async def _handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        response = await ask_agent(transcript, chat_id)
+        async with asyncio.timeout(AGENT_TIMEOUT):
+            response = await ask_agent(transcript, chat_id)
+    except TimeoutError:
+        log.error("agent timed out after %ds for chat %s", AGENT_TIMEOUT, chat_id)
+        response = "Request timed out. Please try again or /reset the session."
     finally:
         stop.set()
         typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
 
     await _send_markdown(update, response)
     _record_reply(chat_id, update.message.message_id)
@@ -393,7 +468,9 @@ def build_telegram_app() -> Application:
     app.add_handler(CommandHandler("project", _project))
     app.add_handler(CommandHandler("find", _find))
     app.add_handler(CommandHandler("inbox", _inbox))
+    app.add_handler(CommandHandler("linear", _linear))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, _handle_voice))
     app.add_error_handler(_handle_error)
     return app
