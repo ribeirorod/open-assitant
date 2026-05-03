@@ -14,12 +14,15 @@ services:
       - OA_BAILEYS_BRIDGE_URL=http://baileys:3100
       # Unset API key so claude CLI uses OAuth from the named volume instead
       - ANTHROPIC_API_KEY=
-      - CLAUDE_CODE_OAUTH_TOKEN=
+      # GitHub token for repo/issue access inside the container
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      # Linear API key for issue tracking integration
+      - LINEAR_API_KEY=${LINEAR_API_KEY}
     volumes:
       # Schedules + sessions (bind mount — stays in sync with host)
       - ${HOME}/.open-assistant:/root/.open-assistant
       # GWS auth — tokens live on the host at ~/.config/gws (run `gws auth login` before starting)
-      - ${HOME}/.config/gws:/root/.config/gws:ro
+      - ${HOME}/.config/gws:/root/.config/gws
       # Claude Code auth (persistent volume — exchanged via setup.sh using claude setup-token)
       - claude-auth:/root/.claude
       # Memory — seeded from Mac on first run
